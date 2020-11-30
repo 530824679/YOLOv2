@@ -7,6 +7,14 @@
 # Description :generator k anchors
 # --------------------------------------
 
+import os
+import sys
+ros_path = '/opt/ros/kinetic/lib/python2.7/dist-packages'
+if ros_path in sys.path:
+    sys.path.remove(ros_path)
+import cv2
+sys.path.append('/opt/ros/kinetic/lib/python2.7/dist-packages')
+
 import xml.etree.ElementTree as ET
 import numpy as np
 import glob
@@ -73,7 +81,7 @@ def kmeans(boxes, k):
 
     return clusters, nearest_clusters
 
-def load_dataset(path):
+def load_xml(path):
     """
     Gets the width and height of the annotation from dataset
     :param path: path of the dataset
@@ -102,6 +110,34 @@ def load_dataset(path):
             list_wh.append([width_norm, height_norm])
     return np.array(list_wh)
 
+def load_txt(root, shape=(416, 416)):
+    """
+    Gets the width and height of the annotation from dataset
+    :param path: path of the dataset
+    :param shape: input height and width
+    :return: list width and height
+    """
+    list_wh = []
+
+    labels_path = os.path.join(root, 'labels')
+    for txt_file in os.listdir(labels_path):
+        filename = os.path.splitext(txt_file)[0]
+        image_path = os.path.join(root, 'images', filename + '.jpg')
+        image = cv2.imread(image_path)
+        image_width = image.shape[1]
+        image_height = image.shape[0]
+
+        resize_ratio = min(shape[0] / image_height, shape[1] / image_width)
+
+        f = open(os.path.join(labels_path, txt_file))
+        for line in f.readlines():
+            data = line.split(' ')
+            width = int(float(data[3]) * resize_ratio)
+            height = int(float(data[4]) * resize_ratio)
+
+            list_wh.append([width, height])
+    return np.array(list_wh)
+
 def plot_data(data, out, k, index):
     for i in range(k):
         color = ['orange', 'green', 'blue', 'gray', 'yellow', 'purple', 'pink', 'black', 'brown']
@@ -119,7 +155,8 @@ if __name__ == '__main__':
     path = 'D:\\BaiduNetdiskDownload\\VOC2028\\VOC2028\\Annotations'
     clusters = 5
 
-    data = load_dataset(path)
+    #data = load_xml(path)
+    data = load_txt('/home/chenwei/HDD/Project/datasets/object_detection/FDDB2016/convert')
     out, cluster_index = kmeans(data, clusters)
 
     print('Boxes:')

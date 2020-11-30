@@ -9,13 +9,12 @@
 import os
 
 path_params = {
-    'data_path': '/home/chenwei/HDD/livox_dl/LIVOX',
+    'data_path': '/home/chenwei/HDD/Project/datasets/object_detection/FDDB2016/convert',
     'checkpoints_dir': './checkpoints',
     'logs_dir': './logs',
-    'tfrecord_dir': '/home/chenwei/HDD/livox_dl/LIVOX/tfrecord',
+    'tfrecord_dir': '/home/chenwei/HDD/Project/YOLOv2/tfrecord',
     'checkpoints_name': 'model.ckpt',
     'train_tfrecord_name': 'train.tfrecord',
-    'test_tfrecord_name': 'test.tfrecord',
     'test_output_dir': './test'
 }
 
@@ -23,14 +22,15 @@ model_params = {
     'image_height': 416,            # 图片高度
     'image_width': 416,             # 图片宽度
     'channels': 3,                  # 输入图片通道数
+    'anchors': [[27, 39], [60, 91], [82, 122], [111, 167], [172, 256]],
+    'classes': ['face'],
     'grid_height': 13,              # 输出特征图的网格高度
     'grid_width': 13,               # 输出特征图的网格宽度
     'anchor_num': 5,                # 每个网格负责预测的BBox个数
-    'object_scale': 1.0,          # 置信度有目标权重
-    'noobject_scale': 5.0,        # 置信度无目标权重
-    'class_scale': 1.0,           # 分类损失权重
-    'coord_scale': 1.0,           # 定位损失权重
-    'num_classes': 4,               # 数据集的类别个数
+    'object_scale': 1.0,            # 置信度有目标权重
+    'noobject_scale': 5.0,          # 置信度无目标权重
+    'class_scale': 1.0,             # 分类损失权重
+    'coord_scale': 1.0,             # 定位损失权重
     'iou_threshold': 0.5,
 }
 
@@ -40,7 +40,7 @@ solver_params = {
     'decay_steps': 30000,           #衰变步数
     'decay_rate': 0.1,              #衰变率
     'staircase': True,
-    'batch_size': 8,                # 每批次输入的数据个数
+    'batch_size': 4,                # 每批次输入的数据个数
     'max_iter': 100000,             # 训练的最大迭代次数
     'save_step': 1000,              # 权重保存间隔
     'log_step': 1000,               # 日志保存间隔
@@ -55,10 +55,4 @@ test_params = {
     'max_output_size': 10           # nms选择的边界框最大数量
 }
 
-classes_map = {'car': 0, 'bus': 1, 'truck': 1, 'pedestrains': 2}
-
-anchors = [[0.42201, 0.78],
-           [0.18211, 0.38385],
-           [1.72714, 2.96461],
-           [0.25958, 0.53024],
-           [0.78, 1.33216]]
+classes_map = {'face': 0}
