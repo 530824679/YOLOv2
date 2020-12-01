@@ -23,8 +23,8 @@ class TFRecord(object):
         self.data_path = path_params['data_path']
         self.tfrecord_dir = path_params['tfrecord_dir']
         self.train_tfrecord_name = path_params['train_tfrecord_name']
-        self.image_width = model_params['image_width']
-        self.image_height = model_params['image_height']
+        self.input_width = model_params['input_width']
+        self.input_height = model_params['input_height']
         self.channels = model_params['channels']
         self.grid_height = model_params['grid_height']
         self.grid_width = model_params['grid_width']
@@ -57,105 +57,87 @@ class TFRecord(object):
             lines = read.readlines()
             for line in lines:
                 filename = line[0:-1]
-                image, bbox = self.dataset.load_data(filename)
-
-                if len(bbox) == 0:
-                    continue
-
-                image_string = image.tobytes()
-                bbox_string = bbox.tobytes()
-                bbox_shape = bbox.shape
+                image_raw, bbox_raw = self.dataset.load_data(filename)
 
                 example = tf.train.Example(features=tf.train.Features(
                     feature={
-                        'image': tf.train.Feature(bytes_list=tf.train.BytesList(value=[image_string])),
-                        'bbox': tf.train.Feature(bytes_list=tf.train.BytesList(value=[bbox_string])),
-                        'bbox_shape': tf.train.Feature(int64_list=tf.train.Int64List(value=bbox_shape))
+                        'image': tf.train.Feature(bytes_list=tf.train.BytesList(value=[image_raw])),
+                        'bbox': tf.train.Feature(bytes_list=tf.train.BytesList(value=[bbox_raw])),
                     }))
                 writer.write(example.SerializeToString())
         writer.close()
         print('Finish trainval.tfrecord Done')
 
-    def parse_single_example(self, tfrecord_file):
+    def parse_single_example(self, serialized_example):
         """
-        :param file_name:待解析的tfrecord文件的名称
+        :param serialized_example:待解析的tfrecord文件的名称
         :return: 从文件中解析出的单个样本的相关特征，image, label
         """
-        # 定义解析TFRecord文件操作
-        reader = tf.TFRecordReader()
-
-        # 创建样本文件名称队列
-        filename_queue = tf.train.string_input_producer([tfrecord_file])
-
         # 解析单个样本文件
-        _, serialized_example = reader.read(filename_queue)
         features = tf.parse_single_example(
             serialized_example,
             features={
                 'image': tf.FixedLenFeature([], tf.string),
                 'bbox': tf.FixedLenFeature([], tf.string),
-                'bbox_shape': tf.FixedLenFeature(shape=(2,), dtype=tf.int64)
             })
 
         image = features['image']
         bbox = features['bbox']
-        bbox_shape = features['bbox_shape']
-
-        return image, bbox, bbox_shape
-
-    def parse_batch_examples(self, file_name):
-        """
-        :param file_name:待解析的tfrecord文件的名称
-        :return: 解析得到的batch_size个样本
-        """
-        batch_size = self.batch_size
-        min_after_dequeue = 100
-        num_threads = 2
-        capacity = min_after_dequeue + 3 * batch_size
-
-
-        image, label, bbox_shape = self.parse_single_example(file_name)
-        image_batch, label_batch = tf.train.shuffle_batch([image, label],
-                                                          batch_size=batch_size,
-                                                          num_threads=num_threads,
-                                                          capacity=capacity,
-                                                          min_after_dequeue=min_after_dequeue)
 
         # 进行解码
-        image_batch = tf.decode_raw(image_batch, tf.uint8)
-        label_batch = tf.decode_raw(label_batch, tf.float32)
+        tf_image = tf.decode_raw(image, tf.uint8)
+        tf_bbox = tf.decode_raw(bbox, tf.float32)
 
         # 转换为网络输入所要求的形状
-        image_batch = tf.reshape(image_batch, [self.batch_size, self.image_height, self.image_width, self.channels])
-        label_batch = tf.reshape(label_batch, [self.batch_size, bbox_shape.shape[0], 4 + self.class_num])
+        tf_image = tf.reshape(tf_image, [self.input_height, self.input_width, self.channels])
+        tf_label = tf.reshape(tf_bbox, [30, 5])
 
-        return image_batch, label_batch
+        # 图像和标签相对于图像空间归一化
+        tf_image = tf.cast(tf_image, tf.float32) / 255.0
+        tf_label = tf_label[..., 0:4] / 416.0
+
+        y_true = tf.py_func(self.dataset.preprocess_true_boxes, inp=[tf_label], Tout=[tf.float32])
+        y_true = tf.reshape(y_true, [self.grid_height, self.grid_width, 5, 6])
+        return tf_image, y_true
+
+    def create_dataset(self, filenames, batch_size=1, is_shuffle=False):
+        """
+        :param filenames: record file names
+        :param batch_size: batch size
+        :param is_shuffle: whether shuffle
+        :param n_repeats: number of repeats
+        :return:
+        """
+        dataset = tf.data.TFRecordDataset(filenames)
+        dataset = dataset.map(self.parse_single_example, num_parallel_calls=4)
+        dataset = dataset.repeat()
+        dataset = dataset.prefetch(batch_size)
+        if is_shuffle:
+            dataset = dataset.shuffle(buffer_size=20*batch_size)
+        dataset = dataset.batch(batch_size)
+
+        return dataset
 
 if __name__ == '__main__':
     tfrecord = TFRecord()
-    #tfrecord.create_tfrecord()
+    tfrecord.create_tfrecord()
 
-    file = '/home/chenwei/HDD/Project/YOLOv2/tfrecord/train.tfrecord'
-    tfrecord = TFRecord()
-    batch_image, batch_label = tfrecord.parse_batch_examples(file)
-    with tf.Session() as sess:
-
-        init_op = tf.global_variables_initializer()
-        sess.run(init_op)
-
-        coord = tf.train.Coordinator()
-        threads = tf.train.start_queue_runners(coord=coord)
-        for i in range(1):
-            label = sess.run([batch_label])
-            #print(image)
-            print(label.astype(np.float32))
-            # box = label[0, ]
-
-            #print(np.shape(image), np.shape(label))
-            # img = np.array(image[0])
-            # cv2.imshow('img', img[0, ...])
-            # cv2.waitKey(0)
-        # print(type(example))
-        coord.request_stop()
-        # coord.clear_stop()
-        coord.join(threads)
+    # import matplotlib.pyplot as plt
+    # file = '/home/chenwei/HDD/Project/YOLOv2/tfrecord/train.tfrecord'
+    # tfrecord = TFRecord()
+    # dataset = tfrecord.create_dataset(file, batch_size=2, is_shuffle=False)
+    # iterator = dataset.make_one_shot_iterator()
+    # images, labels = iterator.get_next()
+    #
+    # with tf.Session() as sess:
+    #     for i in range(20):
+    #         images_, labels_ = sess.run([images, labels])
+    #         print(images_.shape, labels.shape)
+    #         for images_i, boxes_ in zip(images_, labels_):
+    #             boxes_ = boxes_[..., 0:4] * 416
+    #             valid = (np.sum(boxes_, axis=-1) > 0).tolist()
+    #             print([int(idx) for idx in boxes_[:, 0][valid].tolist()])
+    #             for box in boxes_[:, 0:4][valid].tolist():
+    #                 cv2.rectangle(images_i, (int(box[0]), int(box[1])), (int(box[2]), int(box[3])), (255, 0, 0), 2)
+    #             cv2.imshow("image", images_i)
+    #             cv2.waitKey(0)

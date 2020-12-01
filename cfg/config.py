@@ -19,8 +19,8 @@ path_params = {
 }
 
 model_params = {
-    'image_height': 416,            # 图片高度
-    'image_width': 416,             # 图片宽度
+    'input_height': 416,            # 图片高度
+    'input_width': 416,             # 图片宽度
     'channels': 3,                  # 输入图片通道数
     'anchors': [[27, 39], [60, 91], [82, 122], [111, 167], [172, 256]],
     'classes': ['face'],
@@ -40,8 +40,8 @@ solver_params = {
     'decay_steps': 30000,           #衰变步数
     'decay_rate': 0.1,              #衰变率
     'staircase': True,
-    'batch_size': 4,                # 每批次输入的数据个数
-    'max_iter': 100000,             # 训练的最大迭代次数
+    'batch_size': 8,                # 每批次输入的数据个数
+    'epoches': 20000,               # 训练的最大迭代次数
     'save_step': 1000,              # 权重保存间隔
     'log_step': 1000,               # 日志保存间隔
     'display_step': 100,            # 显示打印间隔

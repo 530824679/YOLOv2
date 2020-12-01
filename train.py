@@ -5,10 +5,10 @@ import time
 import tensorflow as tf
 import tensorflow.contrib.slim as slim
 
-from cfg.config import path_params, model_params, solver_params
-from model import network
-from utils import loss_utils
-from data import dataset, tfrecord
+from cfg.config import path_params, solver_params
+from model.network import Network
+from model.loss import Loss
+from data import tfrecord
 
 
 def train():
@@ -29,24 +29,25 @@ def train():
     # 解析得到训练样本以及标注
     data = tfrecord.TFRecord()
     train_tfrecord = os.path.join(tfrecord_dir, tfrecord_name)
-    image_batch, label_batch = data.parse_batch_examples(train_tfrecord)
+    dataset = data.create_dataset(train_tfrecord, batch_size=4, is_shuffle=True)
+    iterator = dataset.make_one_shot_iterator()
+    images, y_true = iterator.get_next()
 
-    # 定义输入的占位符
-    inputs = tf.placeholder(dtype=tf.float32, shape=[None, model_params['image_height'], model_params['image_width'], model_params['channels']], name='inputs')
-    labels = tf.placeholder(dtype=tf.float32, shape=[None, model_params['grid_height'], model_params['grid_width'], model_params['anchor_num'], 8], name='labels')
+    images.set_shape([None, 416, 416, 3])
+    y_true.set_shape([None, 13, 13, 5, 6])
 
     # 构建网络
-    Model = network.Network()
-    logits = Model.build_network(inputs)
+    network = Network(is_train=True)
+    logits, preds = network.forward(images)
 
     # 计算损失函数
-    Losses = loss_utils.Loss(logits, labels, 'loss')
-    loss_op = tf.losses.get_total_loss()
+    losses = Loss()
+    total_loss, coord_loss, confs_loss, class_loss = losses.calc_loss(logits, preds, y_true)
 
-    vars = tf.trainable_variables()
-    l2_reg_loss_op = tf.add_n([tf.nn.l2_loss(var) for var in vars]) * solver_params['weight_decay']
-    total_loss = loss_op + l2_reg_loss_op
     tf.summary.scalar('total_loss', total_loss)
+    tf.summary.scalar("coord_loss", coord_loss)
+    tf.summary.scalar("confs_loss", confs_loss)
+    tf.summary.scalar("class_loss", class_loss)
 
     # 创建全局的步骤
     global_step = tf.train.create_global_step()
@@ -68,15 +69,15 @@ def train():
 
     # 模型保存
     save_variable = tf.global_variables()
-    saver = tf.train.Saver(save_variable, max_to_keep=1000)
+    saver = tf.train.Saver(save_variable, max_to_keep=50)
 
     # 配置tensorboard
     summary_op = tf.summary.merge_all()
     summary_writer = tf.summary.FileWriter(log_dir, graph=tf.get_default_graph(), flush_secs=60)
 
     with tf.Session(config=config) as sess:
-        init_var_op = tf.global_variables_initializer()
-        sess.run(init_var_op)
+        sess.run([tf.global_variables_initializer(), tf.local_variables_initializer()])
+        summary_writer.add_graph(sess.graph)
 
         if restore == True:
             ckpt = tf.train.get_checkpoint_state(checkpoint_dir)
@@ -90,35 +91,20 @@ def train():
             else:
                 print("Failed to find a checkpoint")
 
-        coordinate = tf.train.Coordinator()
-        threads = tf.train.start_queue_runners(coord=coordinate, sess=sess)
-        summary_writer.add_graph(sess.graph)
+        print('\n----------- start to train -----------\n')
+        for epoch in range(start_step + 1, solver_params['epoches']):
+            _, summary_, loss_, coord_loss_, confs_loss_, class_loss_, global_step_, lr = sess.run([train_op, summary_op, total_loss, coord_loss, confs_loss, class_loss, global_step, learning_rate])
 
-        for epoch in range(start_step + 1, solver_params['max_iter']):
-            start_time = time.time()
+            print("Epoch: {}, global_step: {}, lr: {:.8f}, total_loss: {:.3f}, coord_loss: {:.3f}, confs_loss: {:.3f}, class_loss: {:.3f}".format(
+                    epoch, global_step_, lr, loss_, coord_loss_, confs_loss_, class_loss_))
 
-            if coordinate.should_stop():
-                break
-            image, label = sess.run([image_batch, label_batch])
-            feed_dict = {inputs: image, outputs: label}
-            _, loss, current_global_step = sess.run([train_op, total_loss, global_step], feed_dict=feed_dict)
-
-            end_time = time.time()
-
-            if epoch % solver_params['save_step'] == 0:
+            if epoch % solver_params['save_step'] == 0 and epoch > 0:
                 save_path = saver.save(sess, os.path.join(checkpoint_dir, checkpoints_name), global_step=epoch)
                 print('Save modle into {}....'.format(save_path))
 
-            if epoch % log_step == 0:
-                summary = sess.run(summary_op, feed_dict=feed_dict)
-                summary_writer.add_summary(summary, global_step=epoch)
+            if epoch % log_step == 0 and epoch > 0:
+                summary_writer.add_summary(summary_, global_step=global_step_)
 
-            if epoch % display_step == 0:
-                per_iter_time = end_time - start_time
-                print("step:{:.0f}  total_loss:  {:.5f} {:.2f} s/iter".format(epoch, loss, per_iter_time))
-
-        coordinate.request_stop()
-        coordinate.join(threads)
         sess.close()
 
 if __name__ == '__main__':

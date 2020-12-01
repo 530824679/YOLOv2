@@ -24,11 +24,21 @@ class Dataset(object):
     def __init__(self):
         self.data_path = path_params['data_path']
         self.anchors = model_params['anchors']
-        self.image_height = model_params['image_height']
-        self.image_width = model_params['image_width']
+        self.num_classes = model_params['classes']
+        self.input_height = model_params['input_height']
+        self.input_width = model_params['input_width']
         self.grid_height = model_params['grid_height']
         self.grid_width = model_params['grid_width']
         self.iou_threshold = model_params['iou_threshold']
+
+    def convert(self, data):
+        x1 = data[1] - data[3] / 2.0
+        y1 = data[2] - data[4] / 2.0
+        x2 = data[1] + data[3] / 2.0
+        y2 = data[2] + data[4] / 2.0
+        class_id = data[0]
+
+        return [x1, y1, x2, y2, class_id]
 
     def letterbox_resize(self, image, bboxes, new_height, new_width, interp=0):
         """
@@ -65,23 +75,91 @@ class Dataset(object):
 
         label_path = os.path.join(self.data_path, "labels", filename+'.txt')
         lines = [line.rstrip() for line in open(label_path)]
-        num_obj = len(lines)
 
-        index = 0
-        bboxes = np.zeros([num_obj, (4 + 1)], dtype=np.float32)
+        bboxes = []
+
         for line in lines:
             data = line.split(' ')
             data[0:] = [float(t) for t in data[0:]]
-            bboxes[index, 0] = data[0]
-            bboxes[index, 1] = data[1] - data[3] / 2.0
-            bboxes[index, 2] = data[2] - data[4] / 2.0
-            bboxes[index, 3] = data[1] + data[3] / 2.0
-            bboxes[index, 4] = data[2] + data[4] / 2.0
-            index += 1
+            box = self.convert(data)
+            bboxes.append(box)
 
-        image, bboxes = self.letterbox_resize(image, bboxes, self.image_height, self. image_width)
+        image, bboxes = self.letterbox_resize(image, np.array(bboxes, dtype=np.float32), self.input_height, self. input_width)
 
-        return image, bboxes
+        while bboxes.shape[0] < 30:
+            bboxes = np.append(bboxes, [[0.0, 0.0, 0.0, 0.0, 0.0]], axis=0)
 
+        bboxes = np.array(bboxes, dtype=np.float32)
+        image_raw = image.tobytes()
+        bbox_raw = bboxes.tobytes()
 
+        return image_raw, bbox_raw
+
+    def preprocess_true_boxes(self, labels):
+        """
+        preprocess true boxes to train input format
+        :param labels: numpy.ndarray of shape [20, 5]
+                       shape[0]: the number of labels in each image.
+                       shape[1]: x_min, y_min, x_max, y_max, class_index, yaw
+        :return: y_true shape is [feature_height, feature_width, per_anchor_num, 5 + num_classes]
+        """
+        # class id must be less than num_classes
+        #assert (labels[..., 4] < len(self.num_classes)).all()
+        input_shape = np.array([self.input_height, self.input_width], dtype=np.int32)
+
+        assert input_shape[0] % 32 == 0
+        assert input_shape[1] % 32 == 0
+
+        feature_sizes = input_shape // 32
+
+        # anchors 转换到特征图空间
+        anchor_array = np.array(model_params['anchors']) / (32, 32)
+        num_anchors = len(self.anchors)
+
+        # labels 去除空标签
+        valid = (np.sum(labels, axis=-1) > 0).tolist()
+        labels = labels[valid]
+
+        # labels转换到特征图空间
+        labels = labels[:, 0:4] * np.array([feature_sizes[0], feature_sizes[1], feature_sizes[0], feature_sizes[1]])
+
+        y_true = np.zeros(shape=[feature_sizes[0], feature_sizes[1], num_anchors, 4 + 1 + len(self.num_classes)], dtype=np.float32)
+
+        boxes_xy = labels[:, 0:2]    # 中心点坐标
+        boxes_wh = labels[:, 2:4]    # 宽，高
+        true_boxes = np.concatenate([boxes_xy, boxes_wh], axis=-1)
+
+        anchors_max = anchor_array / 2.
+        anchors_min = - anchor_array / 2.
+        valid_mask = boxes_wh[:, 0] > 0
+        wh = boxes_wh[valid_mask]
+
+        # [N, 1, 2]
+        wh = np.expand_dims(wh, -2)
+        boxes_max = wh / 2.
+        boxes_min = - wh / 2.
+
+        # [N, 1, 2] & [5, 2] ==> [N, 5, 2]
+        intersect_mins = np.maximum(boxes_min, anchors_min)
+        intersect_maxs = np.minimum(boxes_max, anchors_max)
+        # [N, 5, 2]
+        intersect_wh = np.maximum(intersect_maxs - intersect_mins, 0.)
+        intersect_area = intersect_wh[..., 0] * intersect_wh[..., 1]
+        box_area = wh[..., 0] * wh[..., 1]
+        anchor_area = anchor_array[:, 0] * anchor_array[:, 1]
+        # [N, 5]
+        iou = intersect_area / (box_area + anchor_area - intersect_area + tf.keras.backend.epsilon())
+
+        # Find best anchor for each true box [N]
+        best_anchor = np.argmax(iou, axis=-1)
+
+        for t, k in enumerate(best_anchor):
+            i = np.floor(true_boxes[t, 0]).astype('int32')
+            j = np.floor(true_boxes[t, 1]).astype('int32')
+            #c = labels[t, 4].astype('int32')
+            y_true[j, i, k, 0:4] = true_boxes[t, 0:4]
+            y_true[j, i, k, 4] = 1
+            y_true[j, i, k, 5] = 1
+
+        return y_true
 
