@@ -72,6 +72,7 @@ class Dataset(object):
     def load_data(self, filename):
         image_path = os.path.join(self.data_path, "images", filename+'.jpg')
         image = cv2.imread(image_path)
+        image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
 
         label_path = os.path.join(self.data_path, "labels", filename+'.txt')
         lines = [line.rstrip() for line in open(label_path)]
@@ -84,13 +85,13 @@ class Dataset(object):
             box = self.convert(data)
             bboxes.append(box)
 
-        image, bboxes = self.letterbox_resize(image, np.array(bboxes, dtype=np.float32), self.input_height, self. input_width)
+        image_rgb, bboxes = self.letterbox_resize(image_rgb, np.array(bboxes, dtype=np.float32), self.input_height, self. input_width)
 
         while bboxes.shape[0] < 30:
             bboxes = np.append(bboxes, [[0.0, 0.0, 0.0, 0.0, 0.0]], axis=0)
 
         bboxes = np.array(bboxes, dtype=np.float32)
-        image_raw = image.tobytes()
+        image_raw = image_rgb.tobytes()
         bbox_raw = bboxes.tobytes()
 
         return image_raw, bbox_raw
@@ -131,6 +132,7 @@ class Dataset(object):
 
         anchors_max = anchor_array / 2.
         anchors_min = - anchor_array / 2.
+
         valid_mask = boxes_wh[:, 0] > 0
         wh = boxes_wh[valid_mask]
 

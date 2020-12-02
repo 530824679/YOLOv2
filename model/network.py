@@ -19,7 +19,8 @@ class Network(object):
         self.grid_width = model_params['grid_width']
         self.anchor_num = model_params['anchor_num']
         self.output_size = self.anchor_num * (5 + self.class_num)
-        self.anchors = model_params['anchors']
+        self.num_anchors = len(model_params['anchors'])
+        self.anchors = np.array(model_params['anchors']) / (32, 32)
 
     def forward(self, inputs):
         feature_maps = self.build_network(inputs)
@@ -90,13 +91,12 @@ class Network(object):
         """
         feature_shape = tf.shape(feature_maps)[1:3]
         batch_size = tf.shape(feature_maps)[0]
-        num_anchors = len(anchors)
 
         # 将传入的anchors转变成tf格式的常量列表
         anchors = tf.constant(anchors, dtype=tf.float32)
 
         # 网络输出转化——偏移量、置信度、类别概率
-        predict = tf.reshape(feature_maps, [batch_size, feature_shape[0], feature_shape[1], num_anchors, self.class_num + 5])
+        predict = tf.reshape(feature_maps, [batch_size, feature_shape[0], feature_shape[1], self.num_anchors, self.class_num + 5])
         # 中心坐标相对于该cell左上角的偏移量，sigmoid函数归一化到0-1
         xy_offset = tf.nn.sigmoid(predict[:, :, :, :, 0:2])
         # 相对于anchor的wh比例，通过e指数解码
@@ -121,4 +121,4 @@ class Network(object):
         bboxes_wh = (anchors * wh_offset) / tf.cast(feature_shape[::-1], tf.float32)
         bboxes_xywh = tf.concat([bboxes_xy, bboxes_wh], axis=-1)
 
-        return tf.concat([bboxes_xywh, obj_probs, class_probs], axis=-1)
+        return bboxes_xywh, obj_probs, class_probs

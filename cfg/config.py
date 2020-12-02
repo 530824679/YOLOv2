@@ -31,7 +31,7 @@ model_params = {
     'noobject_scale': 5.0,          # 置信度无目标权重
     'class_scale': 1.0,             # 分类损失权重
     'coord_scale': 1.0,             # 定位损失权重
-    'iou_threshold': 0.5,
+    'iou_threshold': 0.6,
 }
 
 solver_params = {

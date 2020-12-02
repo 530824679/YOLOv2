@@ -94,6 +94,30 @@ def bboxes_nms(classes, scores, bboxes, nms_threshold=0.5):
     idxes = np.where(keep_bboxes)
     return classes[idxes], scores[idxes], bboxes[idxes]
 
+def preprocess(image, image_size=(416, 416)):
+    image_copy = np.copy(image).astype(np.float32)
+    image_rgb = cv2.cvtColor(image_copy, cv2.COLOR_BGR2RGB)
+
+    # letter resize
+    image_height, image_width = image.shape[:2]
+    resize_ratio = min(image_size[0] / image_width, image_size[1] / image_height)
+    resize_width = int(resize_ratio * image_width)
+    resize_height = int(resize_ratio * image_height)
+
+    image_resized = cv2.resize(image_rgb, (resize_width, resize_height), interpolation=0)
+    image_padded = np.full((image_size[0], image_size[1], 3), 128, np.uint8)
+
+    dw = int((image_size[0] - resize_width) / 2)
+    dh = int((image_size[1] - resize_height) / 2)
+
+    image_padded[dh:resize_height + dh, dw:resize_width + dw, :] = image_resized
+
+    image_normalized = image_padded.astype(np.float32) / 225.0
+
+    image_expanded = np.expand_dims(image_normalized, axis=0)
+
+    return image_expanded
+
 # 筛选解码后的回归边界框
 def postprocess(bboxes, obj_probs, class_probs, image_shape=(416,416), threshold=0.5):
     # boxes shape——> [num, 4]

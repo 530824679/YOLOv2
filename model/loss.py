@@ -30,20 +30,27 @@ class Loss(object):
         self.noobject_scale = model_params['noobject_scale']
         self.coord_scale = model_params['coord_scale']
 
-    def calc_loss(self, pred_feat, pred_bbox, y_true):
-        feature_shape = tf.shape(pred_feat)[1:3]
-        predicts = tf.reshape(pred_feat, [-1, feature_shape[0], feature_shape[1], 5, (5 + 1)])
+    def calc_loss(self, features, pred, y_true):
+        feature_shape = tf.shape(features)[1:3]
+
+        # ground truth
+        coords_label = y_true[:, :, :, :, 0:4]
+        confs_label = y_true[:, :, :, :, 4:5]
+        probs_label = y_true[:, :, :, :, 5:]
+
+        # predicts
+        predicts = tf.reshape(features, [-1, feature_shape[0], feature_shape[1], 5, (5 + 1)])
         conv_conf = predicts[:, :, :, :, 4:5]
         conv_prob = predicts[:, :, :, :, 5:]
 
-        pred_xywh = pred_bbox[:, :, :, :, 0:4]
-        pred_conf = pred_bbox[:, :, :, :, 4:5]
-        pred_class = tf.argmax(pred_bbox[:, :, :, :, 5:], axis=-1)
+
+        pred_xywh = pred[0]
+        pred_conf = pred[1]
+        pred_class = pred[2]
 
         label_xywh = y_true[:, :, :, :, 0:4]
         object_mask = y_true[:, :, :, :, 4:5]
         label_prob = y_true[:, :, :, :, 5:]
-        label_class = tf.argmax(y_true[:, :, :, :, 5:], axis=-1)
 
         """
         compare online statistics
@@ -92,35 +99,6 @@ class Loss(object):
 
         total_loss = coord_loss + conf_loss + prob_loss
         return total_loss, coord_loss, conf_loss, prob_loss
-
-    # def calc_loss(self, logits, predicts, labels):
-    #     anchors = tf.constant(self.anchors, dtype=tf.float32)
-    #     anchors = tf.reshape(anchors, [1, 1, self.anchors_num, 2])  # 存放输入的anchors的wh
-    #
-    #     pred_boxes = predicts[:, :, :, :, 0:4]
-    #     pred_conf = predicts[:, :, :, :, 4:5]
-    #     pred_classes = predicts[:, :, :, :, 5:]
-    #
-    #     label_boxes = labels[:, :, :, :, 0:4]
-    #     label_response = labels[:, :, :, :, 4:5]
-    #     label_classes = labels[:, :, :, :, 5:]
-    #
-    #     iou = self.calc_iou(label_boxes, pred_boxes)
-    #     best_box = tf.to_float(tf.equal(iou, tf.reduce_max(iou, axis=-1, keep_dims=True)))
-    #     confs = tf.expand_dims(best_box, 4) * label_response
-    #
-    #     conid = self.noobject_scale * (1.0 - confs) + self.object_scale * confs
-    #     cooid = self.coord_scale * confs
-    #     proid = self.class_scale * confs
-    #
-    #     coord_loss = cooid * tf.square(pred_boxes - label_boxes)
-    #     conf_loss = conid * tf.square(pred_conf - label_response)
-    #     class_loss = proid * tf.square(pred_classes - label_classes)
-    #
-    #     loss = tf.concat([coord_loss, conf_loss, class_loss], axis=4)
-    #     loss = tf.reduce_mean(tf.reduce_sum(loss, axis=[1, 2, 3, 4]), name='loss')
-    #
-    #     return loss, coord_loss, conf_loss, class_loss
 
     def bbox_iou(self, boxes_1, boxes_2):
         """
