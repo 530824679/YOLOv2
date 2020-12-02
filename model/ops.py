@@ -12,14 +12,14 @@ import tensorflow as tf
 def leaky_relu(x):
     return tf.nn.leaky_relu(x, alpha=0.1, name='leaky_relu')
 
-def conv2d(inputs, filters_num, filters_size, pad_size=0, stride=1, batch_normalize=True, activation=leaky_relu, use_bias=False, name='conv2d'):
+def conv2d(inputs, filters_num, filters_size, pad_size=0, stride=1, batch_normalize=True, activation=leaky_relu, use_bias=False, is_train=True, name='conv2d'):
     if pad_size > 0:
         inputs = tf.pad(inputs, [[0,0], [pad_size, pad_size], [pad_size, pad_size],[0,0]])
 
     out = tf.layers.conv2d(inputs, filters=filters_num, kernel_size=filters_size, strides=stride, padding='VALID', activation=None, use_bias=use_bias, name=name)
 
     if batch_normalize:
-        out = tf.layers.batch_normalization(out, axis=-1, momentum=0.9, training=False, name=name+'_bn')
+        out = tf.layers.batch_normalization(out, axis=-1, momentum=0.9, training=is_train, name=name+'_bn')
 
     if activation:
         out = activation(out)

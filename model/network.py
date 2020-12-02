@@ -14,6 +14,7 @@ from model.ops import *
 
 class Network(object):
     def __init__(self, is_train):
+        self.is_train = is_train
         self.class_num = len(model_params['classes'])
         self.grid_height = model_params['grid_height']
         self.grid_width = model_params['grid_width']
@@ -35,47 +36,47 @@ class Network(object):
         :return: 网络最终的输出
         """
         with tf.name_scope(scope):
-            net = conv2d(inputs, filters_num=32, filters_size=3, pad_size=1, name='conv1')
+            net = conv2d(inputs, filters_num=32, filters_size=3, pad_size=1, is_train=self.is_train, name='conv1')
             net = maxpool(net, size=2, stride=2, name='pool1')
 
-            net = conv2d(net, 64, 3, 1, name='conv2')
+            net = conv2d(net, 64, 3, 1, is_train=self.is_train, name='conv2')
             net = maxpool(net, 2, 2, name='pool2')
 
-            net = conv2d(net, 128, 3, 1, name='conv3_1')
-            net = conv2d(net, 64, 1, 0, name='conv3_2')
-            net = conv2d(net, 128, 3, 1, name='conv3_3')
+            net = conv2d(net, 128, 3, 1, is_train=self.is_train, name='conv3_1')
+            net = conv2d(net, 64, 1, 0, is_train=self.is_train, name='conv3_2')
+            net = conv2d(net, 128, 3, 1, is_train=self.is_train, name='conv3_3')
             net = maxpool(net, 2, 2, name='pool3')
 
-            net = conv2d(net, 256, 3, 1, name='conv4_1')
-            net = conv2d(net, 128, 1, 0, name='conv4_2')
-            net = conv2d(net, 256, 3, 1, name='conv4_3')
+            net = conv2d(net, 256, 3, 1, is_train=self.is_train, name='conv4_1')
+            net = conv2d(net, 128, 1, 0, is_train=self.is_train, name='conv4_2')
+            net = conv2d(net, 256, 3, 1, is_train=self.is_train, name='conv4_3')
             net = maxpool(net, 2, 2, name='pool4')
 
-            net = conv2d(net, 512, 3, 1, name='conv5_1')
-            net = conv2d(net, 256, 1, 0, name='conv5_2')
-            net = conv2d(net, 512, 3, 1, name='conv5_3')
-            net = conv2d(net, 256, 1, 0, name='conv5_4')
-            net = conv2d(net, 512, 3, 1, name='conv5_5')
+            net = conv2d(net, 512, 3, 1, is_train=self.is_train, name='conv5_1')
+            net = conv2d(net, 256, 1, 0, is_train=self.is_train, name='conv5_2')
+            net = conv2d(net, 512, 3, 1, is_train=self.is_train, name='conv5_3')
+            net = conv2d(net, 256, 1, 0, is_train=self.is_train, name='conv5_4')
+            net = conv2d(net, 512, 3, 1, is_train=self.is_train, name='conv5_5')
 
             # 存储这一层特征图，以便后面passthrough层
             shortcut = net
             net = maxpool(net, 2, 2, name='pool5')
 
-            net = conv2d(net, 1024, 3, 1, name='conv6_1')
-            net = conv2d(net, 512, 1, 0, name='conv6_2')
-            net = conv2d(net, 1024, 3, 1, name='conv6_3')
-            net = conv2d(net, 512, 1, 0, name='conv6_4')
-            net = conv2d(net, 1024, 3, 1, name='conv6_5')
+            net = conv2d(net, 1024, 3, 1, is_train=self.is_train, name='conv6_1')
+            net = conv2d(net, 512, 1, 0, is_train=self.is_train, name='conv6_2')
+            net = conv2d(net, 1024, 3, 1, is_train=self.is_train, name='conv6_3')
+            net = conv2d(net, 512, 1, 0, is_train=self.is_train, name='conv6_4')
+            net = conv2d(net, 1024, 3, 1, is_train=self.is_train, name='conv6_5')
 
-            net = conv2d(net, 1024, 3, 1, name='conv7_1')
-            net = conv2d(net, 1024, 3, 1, name='conv7_2')
+            net = conv2d(net, 1024, 3, 1, is_train=self.is_train, name='conv7_1')
+            net = conv2d(net, 1024, 3, 1, is_train=self.is_train, name='conv7_2')
 
             # shortcut增加了一个中间卷积层，先采用64个1*1卷积核进行卷积，然后再进行passthrough处理
             # 这样26*26*512 -> 26*26*64 -> 13*13*256的特征图
-            shortcut = conv2d(shortcut, 64, 1, 0, name='conv_shortcut')
+            shortcut = conv2d(shortcut, 64, 1, 0, is_train=self.is_train, name='conv_shortcut')
             shortcut = reorg(shortcut, 2)
             net = tf.concat([shortcut, net], axis=-1)
-            net = conv2d(net, 1024, 3, 1, name='conv8')
+            net = conv2d(net, 1024, 3, 1, is_train=self.is_train, name='conv8')
 
             # 用一个1*1卷积去调整channel,该层没有bn层和激活函数
             logits = conv2d(net, filters_num=self.output_size, filters_size=1, batch_normalize=False, activation=None, use_bias=True, name='logits')
