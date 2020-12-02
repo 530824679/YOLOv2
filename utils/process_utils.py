@@ -121,7 +121,7 @@ def preprocess(image, image_size=(416, 416)):
 # 筛选解码后的回归边界框
 def postprocess(bboxes, obj_probs, class_probs, image_shape=(416,416), threshold=0.5):
     bboxes = boxes_to_corners(bboxes)
-    
+
     # boxes shape——> [num, 4]
     bboxes = np.reshape(bboxes, [-1, 4])
 

@@ -122,4 +122,11 @@ class Network(object):
         bboxes_wh = (anchors * wh_offset) / tf.cast(feature_shape[::-1], tf.float32)
         bboxes_xywh = tf.concat([bboxes_xy, bboxes_wh], axis=-1)
 
+        if self.is_train == False:
+            # 转变成坐上-右下坐标
+            bboxes_corners = tf.stack([bboxes_xywh[..., 0] - bboxes_xywh[..., 2] / 2,
+                               bboxes_xywh[..., 1] - bboxes_xywh[..., 3] / 2,
+                               bboxes_xywh[..., 0] + bboxes_xywh[..., 2] / 2,
+                               bboxes_xywh[..., 1] + bboxes_xywh[..., 3] / 2], axis=3)
+            return bboxes_corners, obj_probs, class_probs
         return bboxes_xywh, obj_probs, class_probs
