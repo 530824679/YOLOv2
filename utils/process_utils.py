@@ -169,7 +169,7 @@ def boxes_to_corners(boxes):
         box_maxes[..., 0:1]  # x_max
     ])
 
-def visualization(im, bboxes, scores, cls_inds, labels, thr=0.3):
+def visualization(im, bboxes, scores, cls_inds, labels, thr=0.02):
     # Generate colors for drawing bounding boxes.
     hsv_tuples = [(x / float(len(labels)), 1., 1.) for x in range(len(labels))]
     colors = list(map(lambda x: colorsys.hsv_to_rgb(*x), hsv_tuples))

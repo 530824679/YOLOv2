@@ -36,7 +36,7 @@ model_params = {
 
 solver_params = {
     'gpu': '0',                     # 使用的gpu索引
-    'learning_rate': 0.01,        # 初始学习率
+    'learning_rate': 0.001,        # 初始学习率
     'decay_steps': 30000,           #衰变步数
     'decay_rate': 0.1,              #衰变率
     'staircase': True,

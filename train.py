@@ -7,7 +7,6 @@ import tensorflow.contrib.slim as slim
 
 from cfg.config import path_params, solver_params
 from model.network import Network
-from model.loss import Loss
 from data import tfrecord
 
 
@@ -40,8 +39,7 @@ def train():
     logits = network.build_network(images)
 
     # 计算损失函数
-    losses = Loss()
-    total_loss, xy_loss, wh_loss, confs_loss, class_loss = losses.calc_loss(logits, y_true)
+    total_loss, xy_loss, wh_loss, confs_loss, class_loss = network.calc_loss(logits, y_true)
 
     tf.summary.scalar('total_loss', total_loss)
     tf.summary.scalar("xy_loss", xy_loss)
@@ -49,23 +47,13 @@ def train():
     tf.summary.scalar("confs_loss", confs_loss)
     tf.summary.scalar("class_loss", class_loss)
 
-    # 创建全局的步骤
-    global_step = tf.train.create_global_step()
-    # 设定变化的学习率
-    learning_rate = tf.train.exponential_decay(
-        solver_params['learning_rate'],
-        global_step,
-        solver_params['decay_steps'],
-        solver_params['decay_rate'],
-        solver_params['staircase'],
-        name='learning_rate')
+    global_step = tf.get_variable('global_step', [], initializer=tf.constant_initializer(0), trainable=False)
+    learn_rate = tf.train.exponential_decay(solver_params['learning_rate'], global_step, 20000, 0.1, name='learn_rate')
 
     # 设置优化器
     update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
     with tf.control_dependencies(update_ops):
-        # 采用的优化方法是随机梯度下降
-        optimizer = tf.train.GradientDescentOptimizer(learning_rate=learning_rate)
-        train_op = slim.learning.create_train_op(total_loss, optimizer, global_step)
+        train_op = tf.train.AdamOptimizer(learning_rate=learn_rate).minimize(total_loss, global_step=global_step)
 
     # 模型保存
     save_variable = tf.global_variables()
@@ -93,9 +81,9 @@ def train():
 
         print('\n----------- start to train -----------\n')
         for epoch in range(start_step + 1, solver_params['epoches']):
-            _, summary_, loss_, xy_loss_, wh_loss_, confs_loss_, class_loss_, global_step_, lr = sess.run([train_op, summary_op, total_loss, xy_loss, wh_loss, confs_loss, class_loss, global_step, learning_rate])
+            _, summary_, loss_, xy_loss_, wh_loss_, confs_loss_, class_loss_, global_step_, lr = sess.run([train_op, summary_op, total_loss, xy_loss, wh_loss, confs_loss, class_loss, global_step, learn_rate])
 
-            print("Epoch: {}, global_step: {}, lr: {:.8f}, total_loss: {:.3f}, coord_loss: {:.3f}, confs_loss: {:.3f}, class_loss: {:.3f}".format(
+            print("Epoch: {}, global_step: {}, lr: {:.8f}, total_loss: {:.3f}, xy_loss: {:.3f}, wh_loss: {:.3f},confs_loss: {:.3f}, class_loss: {:.3f}".format(
                     epoch, global_step_, lr, loss_, xy_loss_, wh_loss_, confs_loss_, class_loss_))
 
             if epoch % solver_params['save_step'] == 0 and epoch > 0:

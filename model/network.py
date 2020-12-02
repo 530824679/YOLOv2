@@ -166,12 +166,12 @@ class Network(object):
 
         # 图像尺寸归一化信息转换为特征图的单元格相对信息
         # shape: [N, 13, 13, 3, 2]  # 坐标反归一化
-        true_xy = y_true[..., 0:2] * feature_size - xy_offset
-        pred_xy = pred_box_xy * feature_size - xy_offset
+        true_xy = y_true[..., 0:2] * tf.cast(feature_size, tf.float32) - xy_offset
+        pred_xy = pred_box_xy * tf.cast(feature_size, tf.float32) - xy_offset
 
         # shape: [N, 13, 13, 3, 2],
-        true_tw_th = y_true[..., 2:4] * feature_size / self.anchors
-        pred_tw_th = pred_box_wh * feature_size / self.anchors
+        true_tw_th = y_true[..., 2:4] * tf.cast(feature_size, tf.float32) / self.anchors
+        pred_tw_th = pred_box_wh * tf.cast(feature_size, tf.float32) / self.anchors
 
         # for numerical stability 稳定训练, 为0时不对anchors进行缩放, 在模型输出值特别小是e^out_put为0
         true_tw_th = tf.where(condition=tf.equal(true_tw_th, 0), x=tf.ones_like(true_tw_th), y=true_tw_th)
