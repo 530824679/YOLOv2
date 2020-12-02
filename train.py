@@ -14,7 +14,6 @@ from data import tfrecord
 def train():
     start_step = 0
     log_step = solver_params['log_step']
-    display_step = solver_params['display_step']
     restore = solver_params['restore']
     checkpoint_dir = path_params['checkpoints_dir']
     checkpoints_name = path_params['checkpoints_name']
