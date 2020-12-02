@@ -9,7 +9,7 @@
 
 import numpy as np
 import tensorflow as tf
-from cfg.config import model_params
+from cfg.config import model_params, solver_params
 from model.ops import *
 
 class Network(object):
@@ -18,15 +18,18 @@ class Network(object):
         self.class_num = len(model_params['classes'])
         self.grid_height = model_params['grid_height']
         self.grid_width = model_params['grid_width']
-        self.anchor_num = model_params['anchor_num']
-        self.output_size = self.anchor_num * (5 + self.class_num)
-        self.num_anchors = len(model_params['anchors'])
         self.anchors = np.array(model_params['anchors']) / (32, 32)
+        self.anchors_num = len(self.anchors)
+        self.output_size = self.anchors_num * (5 + self.class_num)
+        self.num_anchors = len(model_params['anchors'])
 
-    def forward(self, inputs):
-        feature_maps = self.build_network(inputs)
-        output = self.reorg_layer(feature_maps, self.anchors)
-        return feature_maps, output
+        self.batch_size = solver_params['batch_size']
+        self.num_class = len(model_params['classes'])
+        self.iou_threshold = model_params['iou_threshold']
+        self.class_scale = model_params['class_scale']
+        self.object_scale = model_params['object_scale']
+        self.noobject_scale = model_params['noobject_scale']
+        self.coord_scale = model_params['coord_scale']
 
     def build_network(self, inputs, scope='yolo_v2'):
         """
@@ -120,13 +123,116 @@ class Network(object):
         # decode to raw image norm 0-1
         bboxes_xy = (xy_cell + xy_offset) / tf.cast(feature_shape[::-1], tf.float32)
         bboxes_wh = (anchors * wh_offset) / tf.cast(feature_shape[::-1], tf.float32)
-        bboxes_xywh = tf.concat([bboxes_xy, bboxes_wh], axis=-1)
 
         if self.is_train == False:
             # 转变成坐上-右下坐标
+            bboxes_xywh = tf.concat([bboxes_xy, bboxes_wh], axis=-1)
             bboxes_corners = tf.stack([bboxes_xywh[..., 0] - bboxes_xywh[..., 2] / 2,
                                bboxes_xywh[..., 1] - bboxes_xywh[..., 3] / 2,
                                bboxes_xywh[..., 0] + bboxes_xywh[..., 2] / 2,
                                bboxes_xywh[..., 1] + bboxes_xywh[..., 3] / 2], axis=3)
             return bboxes_corners, obj_probs, class_probs
-        return bboxes_xywh, obj_probs, class_probs
+        return xy_cell, predict, bboxes_xy, bboxes_wh
+
+    def calc_loss(self, logits, y_true):
+        feature_size = tf.shape(logits)[1:3]
+
+        # ground truth
+        object_coords = y_true[:, :, :, :, 0:4]
+        object_masks = y_true[:, :, :, :, 4:5]
+        object_probs = y_true[:, :, :, :, 5:]
+
+        # shape: [N, 13, 13, 5, 4] & [N, 13, 13, 5] ==> [V, 4]
+        valid_true_boxes = tf.boolean_mask(object_coords, tf.cast(object_masks[..., 0], 'bool'))
+        # shape: [V, 2]
+        valid_true_box_xy = valid_true_boxes[:, 0:2]
+        valid_true_box_wh = valid_true_boxes[:, 2:4]
+
+        # predicts
+        xy_offset, predictions, pred_box_xy, pred_box_wh = self.reorg_layer(logits, self.anchors)
+        pred_conf_logits = predictions[:, :, :, :, 4:5]
+        pred_prob_logits = predictions[:, :, :, :, 5:]
+
+        # calc iou 计算每个pre_boxe与所有true_boxe的交并比.
+        # valid_true_box_xx: [V,2]
+        # pred_box_xx: [13,13,5,2]
+        # shape: [N, 13, 13, 5, V],
+        iou = self.broadcast_iou(valid_true_box_xy, valid_true_box_wh, pred_box_xy, pred_box_wh)
+        # shape : [N,13,13,5]
+        best_iou = tf.reduce_max(iou, axis=-1)
+
+        # get_ignore_mask shape: [N,13,13,5,1] 0,1张量
+        ignore_mask = tf.expand_dims(tf.cast(best_iou < self.iou_threshold, tf.float32), -1)
+
+        # 图像尺寸归一化信息转换为特征图的单元格相对信息
+        # shape: [N, 13, 13, 3, 2]  # 坐标反归一化
+        true_xy = y_true[..., 0:2] * feature_size - xy_offset
+        pred_xy = pred_box_xy * feature_size - xy_offset
+
+        # shape: [N, 13, 13, 3, 2],
+        true_tw_th = y_true[..., 2:4] * feature_size / self.anchors
+        pred_tw_th = pred_box_wh * feature_size / self.anchors
+
+        # for numerical stability 稳定训练, 为0时不对anchors进行缩放, 在模型输出值特别小是e^out_put为0
+        true_tw_th = tf.where(condition=tf.equal(true_tw_th, 0), x=tf.ones_like(true_tw_th), y=true_tw_th)
+        pred_tw_th = tf.where(condition=tf.equal(pred_tw_th, 0), x=tf.ones_like(pred_tw_th), y=pred_tw_th)
+
+        true_tw_th = tf.log(tf.clip_by_value(true_tw_th, 1e-9, 1e9))
+        pred_tw_th = tf.log(tf.clip_by_value(pred_tw_th, 1e-9, 1e9))
+
+        # shape: [N, 13, 13, 3, 1]
+        box_loss_scale = 2. - y_true[..., 2:3] * y_true[..., 3:4]
+        xy_loss = tf.square(true_xy - pred_xy) * object_masks * box_loss_scale
+        wh_loss = tf.square(true_tw_th - pred_tw_th) * object_masks * box_loss_scale
+
+        # shape: [N, 13, 13, 3, 1]
+        conf_pos_mask = object_masks
+        conf_neg_mask = (1 - object_masks) * ignore_mask
+
+        conf_loss_pos = conf_pos_mask * tf.nn.sigmoid_cross_entropy_with_logits(labels=object_masks, logits=pred_conf_logits)
+        conf_loss_neg = conf_neg_mask * tf.nn.sigmoid_cross_entropy_with_logits(labels=object_masks, logits=pred_conf_logits)
+        conf_loss = conf_loss_pos + conf_loss_neg
+
+        # shape: [N, 13, 13, 3, 1]
+        class_loss = object_masks * tf.nn.sigmoid_cross_entropy_with_logits(labels=y_true[..., 5:], logits=pred_prob_logits)
+
+        xy_loss = tf.reduce_mean(tf.reduce_sum(xy_loss, axis=[1, 2, 3, 4]))
+        wh_loss = tf.reduce_mean(tf.reduce_sum(wh_loss, axis=[1, 2, 3, 4]))
+        conf_loss = tf.reduce_mean(tf.reduce_sum(conf_loss, axis=[1, 2, 3, 4]))
+        class_loss = tf.reduce_mean(tf.reduce_sum(class_loss, axis=[1, 2, 3, 4]))
+
+        total_loss = xy_loss + wh_loss + conf_loss + class_loss
+        return total_loss, xy_loss, wh_loss, conf_loss, class_loss
+
+    def broadcast_iou(self, true_box_xy, true_box_wh, pred_box_xy, pred_box_wh):
+        # shape:
+        # true_box_??: [V, 2] V:目标数量
+        # pred_box_??: [N, 13, 13, 3, 2]
+
+        # shape: [N, 13, 13, 3, 1, 2] , 扩张维度方便进行维度广播
+        pred_box_xy = tf.expand_dims(pred_box_xy, -2)
+        pred_box_wh = tf.expand_dims(pred_box_wh, -2)
+
+        # shape: [1, V, 2] V:该尺度下分feature_map 下所有的目标是目标数量
+        true_box_xy = tf.expand_dims(true_box_xy, 0)
+        true_box_wh = tf.expand_dims(true_box_wh, 0)
+
+        # [N, 13, 13, 3, 1, 2] --> [N, 13, 13, 3, V, 2] & [1, V, 2] ==> [N, 13, 13, 3, V, 2] 维度广播
+        # 真boxe,左上角,右下角, 假boxe的左上角,右小角,
+        intersect_mins = tf.maximum(pred_box_xy - pred_box_wh / + 2.,  # 取最靠右的左上角
+                                    true_box_xy - true_box_wh / 2.)
+        intersect_maxs = tf.minimum(pred_box_xy + pred_box_wh / 2.,  # 取最靠左的右下角
+                                    true_box_xy + true_box_wh / 2.)
+        # tf.maximun 去除那些没有面积交叉的矩形框, 置0
+        intersect_wh = tf.maximum(intersect_maxs - intersect_mins, 0.)  # 得到重合区域的长和宽
+
+        # shape: [N, 13, 13, 3, V]
+        intersect_area = intersect_wh[..., 0] * intersect_wh[..., 1]  # 重合部分面积
+        # shape: [N, 13, 13, 3, 1]
+        pred_box_area = pred_box_wh[..., 0] * pred_box_wh[..., 1]  # 预测区域面积
+        # shape: [1, V]
+        true_box_area = true_box_wh[..., 0] * true_box_wh[..., 1]  # 真实区域面积
+        # [N, 13, 13, 3, V]
+        iou = intersect_area / (pred_box_area + true_box_area - intersect_area)
+
+        return iou
