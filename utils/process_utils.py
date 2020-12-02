@@ -120,6 +120,8 @@ def preprocess(image, image_size=(416, 416)):
 
 # 筛选解码后的回归边界框
 def postprocess(bboxes, obj_probs, class_probs, image_shape=(416,416), threshold=0.5):
+    bboxes = boxes_to_corners(bboxes)
+    
     # boxes shape——> [num, 4]
     bboxes = np.reshape(bboxes, [-1, 4])
 
@@ -154,6 +156,20 @@ def postprocess(bboxes, obj_probs, class_probs, image_shape=(416,416), threshold
     class_max_index, scores, bboxes = bboxes_nms(class_max_index, scores, bboxes)
 
     return bboxes, scores, class_max_index
+
+def boxes_to_corners(boxes):
+    box_xy = boxes[..., 0:2]
+    box_wh = boxes[..., 2:4]
+
+    box_mins = box_xy - (box_wh / 2.)
+    box_maxes = box_xy + (box_wh / 2.)
+
+    return np.concatenate([
+        box_mins[..., 1:2],  # y_min
+        box_mins[..., 0:1],  # x_min
+        box_maxes[..., 1:2],  # y_max
+        box_maxes[..., 0:1]  # x_max
+    ])
 
 def visualization(im, bboxes, scores, cls_inds, labels, thr=0.3):
     # Generate colors for drawing bounding boxes.
