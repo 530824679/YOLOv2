@@ -90,7 +90,7 @@ class TFRecord(object):
 
         # 转换为网络输入所要求的形状
         tf_image = tf.reshape(tf_image, [self.input_height, self.input_width, self.channels])
-        tf_label = tf.reshape(tf_bbox, [30, 5])
+        tf_label = tf.reshape(tf_bbox, [150, 5])
 
         # 图像和标签相对于图像空间归一化
         tf_image = tf.cast(tf_image, tf.float32) / 255.0

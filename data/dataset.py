@@ -87,7 +87,7 @@ class Dataset(object):
 
         image_rgb, bboxes = self.letterbox_resize(image_rgb, np.array(bboxes, dtype=np.float32), self.input_height, self. input_width)
 
-        while bboxes.shape[0] < 30:
+        while bboxes.shape[0] < 150:
             bboxes = np.append(bboxes, [[0.0, 0.0, 0.0, 0.0, 0.0]], axis=0)
 
         bboxes = np.array(bboxes, dtype=np.float32)
@@ -158,10 +158,10 @@ class Dataset(object):
         for t, k in enumerate(best_anchor):
             i = np.floor(true_boxes[t, 0]).astype('int32')
             j = np.floor(true_boxes[t, 1]).astype('int32')
-            #c = labels[t, 4].astype('int32')
+            c = labels[t, 4].astype('int32')
             y_true[j, i, k, 0:4] = true_boxes[t, 0:4]
             y_true[j, i, k, 4] = 1
-            y_true[j, i, k, 5] = 1
+            y_true[j, i, k, 5 + c] = 1
 
         return y_true
 

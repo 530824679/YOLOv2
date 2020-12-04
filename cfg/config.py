@@ -36,11 +36,11 @@ model_params = {
 
 solver_params = {
     'gpu': '0',                     # 使用的gpu索引
-    'learning_rate': 0.001,        # 初始学习率
+    'learning_rate': 0.0001,        # 初始学习率
     'decay_steps': 30000,           #衰变步数
     'decay_rate': 0.1,              #衰变率
     'staircase': True,
-    'batch_size': 4,                # 每批次输入的数据个数
+    'batch_size': 8,                # 每批次输入的数据个数
     'epoches': 50000,               # 训练的最大迭代次数
     'save_step': 1000,              # 权重保存间隔
     'log_step': 1000,               # 日志保存间隔
@@ -50,7 +50,7 @@ solver_params = {
 
 test_params = {
     'prob_threshold': 0.01,         # 类别置信度分数阈值
-    'iou_threshold': 0.1,           # nms阈值，小于0.4被过滤掉
+    'iou_threshold': 0.4,           # nms阈值，小于0.4被过滤掉
     'max_output_size': 10           # nms选择的边界框最大数量
 }
 

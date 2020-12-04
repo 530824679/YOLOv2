@@ -16,6 +16,8 @@ class Network(object):
     def __init__(self, is_train):
         self.is_train = is_train
         self.class_num = len(model_params['classes'])
+        self.input_height = model_params['input_height']
+        self.input_width = model_params['input_width']
         self.grid_height = model_params['grid_height']
         self.grid_width = model_params['grid_width']
         self.anchors = np.array(model_params['anchors']) / (32, 32)
@@ -94,13 +96,13 @@ class Network(object):
         :return: 网络最终的输出
         """
         feature_shape = tf.shape(feature_maps)[1:3]
-        batch_size = tf.shape(feature_maps)[0]
-
+        ratio = tf.cast([self.input_height, self.input_width] / feature_shape, tf.float32)
         # 将传入的anchors转变成tf格式的常量列表
         anchors = tf.constant(anchors, dtype=tf.float32)
+        rescaled_anchors = [anchors[0] / ratio[1], anchors[1] / ratio[0]]
 
         # 网络输出转化——偏移量、置信度、类别概率
-        predict = tf.reshape(feature_maps, [batch_size, feature_shape[0], feature_shape[1], self.num_anchors, self.class_num + 5])
+        predict = tf.reshape(feature_maps, [-1, feature_shape[0], feature_shape[1], self.num_anchors, self.class_num + 5])
         # 中心坐标相对于该cell左上角的偏移量，sigmoid函数归一化到0-1
         xy_offset = tf.nn.sigmoid(predict[:, :, :, :, 0:2])
         # 相对于anchor的wh比例，通过e指数解码
@@ -122,7 +124,7 @@ class Network(object):
 
         # decode to raw image norm 0-1
         bboxes_xy = (xy_cell + xy_offset) / tf.cast(feature_shape[::-1], tf.float32)
-        bboxes_wh = (anchors * wh_offset) / tf.cast(feature_shape[::-1], tf.float32)
+        bboxes_wh = (rescaled_anchors * wh_offset) / tf.cast(feature_shape[::-1], tf.float32)
 
         if self.is_train == False:
             # 转变成坐上-右下坐标

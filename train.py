@@ -53,7 +53,7 @@ def train():
     # 设置优化器
     update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
     with tf.control_dependencies(update_ops):
-        train_op = tf.train.AdamOptimizer(learning_rate=learn_rate).minimize(total_loss, global_step=global_step)
+        train_op = tf.train.MomentumOptimizer(learning_rate=learn_rate, momentum=0.9).minimize(total_loss, global_step=global_step)
 
     # 模型保存
     save_variable = tf.global_variables()
