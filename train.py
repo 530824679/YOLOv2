@@ -19,6 +19,7 @@ def train():
     tfrecord_dir = path_params['tfrecord_dir']
     tfrecord_name = path_params['train_tfrecord_name']
     log_dir = path_params['logs_dir']
+    batch_size = solver_params['batch_size']
 
     # 配置GPU
     gpu_options = tf.GPUOptions(allow_growth=True)
@@ -27,7 +28,7 @@ def train():
     # 解析得到训练样本以及标注
     data = tfrecord.TFRecord()
     train_tfrecord = os.path.join(tfrecord_dir, tfrecord_name)
-    dataset = data.create_dataset(train_tfrecord, batch_size=4, is_shuffle=True)
+    dataset = data.create_dataset(train_tfrecord, batch_size=batch_size, is_shuffle=True)
     iterator = dataset.make_one_shot_iterator()
     images, y_true = iterator.get_next()
 

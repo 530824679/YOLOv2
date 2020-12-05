@@ -20,7 +20,7 @@ class Network(object):
         self.input_width = model_params['input_width']
         self.grid_height = model_params['grid_height']
         self.grid_width = model_params['grid_width']
-        self.anchors = np.array(model_params['anchors']) / (32, 32)
+        self.anchors = model_params['anchors']
         self.anchors_num = len(self.anchors)
         self.output_size = self.anchors_num * (5 + self.class_num)
         self.num_anchors = len(model_params['anchors'])
@@ -139,6 +139,10 @@ class Network(object):
     def calc_loss(self, logits, y_true):
         feature_size = tf.shape(logits)[1:3]
 
+        ratio = tf.cast([self.input_height, self.input_width] / feature_size, tf.float32)
+        anchors = tf.constant(self.anchors, dtype=tf.float32)
+        rescaled_anchors = [anchors[0] / ratio[1], anchors[1] / ratio[0]]
+
         # ground truth
         object_coords = y_true[:, :, :, :, 0:4]
         object_masks = y_true[:, :, :, :, 4:5]
@@ -172,8 +176,8 @@ class Network(object):
         pred_xy = pred_box_xy * tf.cast(feature_size, tf.float32) - xy_offset
 
         # shape: [N, 13, 13, 3, 2],
-        true_tw_th = y_true[..., 2:4] * tf.cast(feature_size, tf.float32) / self.anchors
-        pred_tw_th = pred_box_wh * tf.cast(feature_size, tf.float32) / self.anchors
+        true_tw_th = y_true[..., 2:4] * tf.cast(feature_size, tf.float32) / rescaled_anchors
+        pred_tw_th = pred_box_wh * tf.cast(feature_size, tf.float32) / rescaled_anchors
 
         # for numerical stability 稳定训练, 为0时不对anchors进行缩放, 在模型输出值特别小是e^out_put为0
         true_tw_th = tf.where(condition=tf.equal(true_tw_th, 0), x=tf.ones_like(true_tw_th), y=true_tw_th)

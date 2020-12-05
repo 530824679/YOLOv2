@@ -113,16 +113,13 @@ class Dataset(object):
 
         feature_sizes = input_shape // 32
 
-        # anchors 转换到特征图空间
-        anchor_array = np.array(model_params['anchors']) / (32, 32)
+        # anchors 归一化到图像空间0~1
+        anchor_array = np.array(model_params['anchors']) / input_shape
         num_anchors = len(self.anchors)
 
         # labels 去除空标签
         valid = (np.sum(labels, axis=-1) > 0).tolist()
         labels = labels[valid]
-
-        # labels转换到特征图空间
-        labels = labels[:, 0:4] * np.array([feature_sizes[0], feature_sizes[1], feature_sizes[0], feature_sizes[1]])
 
         y_true = np.zeros(shape=[feature_sizes[0], feature_sizes[1], num_anchors, 4 + 1 + len(self.num_classes)], dtype=np.float32)
 
