@@ -98,19 +98,18 @@ class Network(object):
         feature_shape = tf.shape(feature_maps)[1:3]
         ratio = tf.cast([self.input_height, self.input_width] / feature_shape, tf.float32)
         # 将传入的anchors转变成tf格式的常量列表
-        anchors = tf.constant(anchors, dtype=tf.float32)
-        rescaled_anchors = [anchors[0] / ratio[1], anchors[1] / ratio[0]]
+        rescaled_anchors = [(anchor[0] / ratio[1], anchor[1] / ratio[0]) for anchor in anchors]
 
         # 网络输出转化——偏移量、置信度、类别概率
         predict = tf.reshape(feature_maps, [-1, feature_shape[0], feature_shape[1], self.num_anchors, self.class_num + 5])
         # 中心坐标相对于该cell左上角的偏移量，sigmoid函数归一化到0-1
-        xy_offset = tf.nn.sigmoid(predict[:, :, :, :, 0:2])
+        xy_offset = tf.nn.sigmoid(predict[..., 0:2])
         # 相对于anchor的wh比例，通过e指数解码
-        wh_offset = tf.clip_by_value(tf.exp(predict[:, :, :, :, 2:4]), 1e-9, 50)
+        wh_offset = tf.clip_by_value(tf.exp(predict[..., 2:4]), 1e-9, 50)
         # 置信度，sigmoid函数归一化到0-1
-        obj_probs = tf.nn.sigmoid(predict[:, :, :, :, 4:5])
+        obj_probs = tf.nn.sigmoid(predict[..., 4:5])
         # 网络回归的是得分,用softmax转变成类别概率
-        class_probs = tf.nn.softmax(predict[:, :, :, :, 5:])
+        class_probs = tf.nn.softmax(predict[..., 5:])
 
         # 构建特征图每个cell的左上角的xy坐标
         height_index = tf.range(feature_shape[0], dtype=tf.int32)
@@ -140,8 +139,7 @@ class Network(object):
         feature_size = tf.shape(logits)[1:3]
 
         ratio = tf.cast([self.input_height, self.input_width] / feature_size, tf.float32)
-        anchors = tf.constant(self.anchors, dtype=tf.float32)
-        rescaled_anchors = [anchors[0] / ratio[1], anchors[1] / ratio[0]]
+        rescaled_anchors = [(anchor[0] / ratio[1], anchor[1] / ratio[0]) for anchor in self.anchors]
 
         # ground truth
         object_coords = y_true[:, :, :, :, 0:4]
@@ -172,8 +170,8 @@ class Network(object):
 
         # 图像尺寸归一化信息转换为特征图的单元格相对信息
         # shape: [N, 13, 13, 3, 2]  # 坐标反归一化
-        true_xy = y_true[..., 0:2] * tf.cast(feature_size, tf.float32) - xy_offset
-        pred_xy = pred_box_xy * tf.cast(feature_size, tf.float32) - xy_offset
+        true_xy = y_true[..., 0:2] * tf.cast(feature_size[::-1], tf.float32) - xy_offset
+        pred_xy = pred_box_xy * tf.cast(feature_size[::-1], tf.float32) - xy_offset
 
         # shape: [N, 13, 13, 3, 2],
         true_tw_th = y_true[..., 2:4] * tf.cast(feature_size, tf.float32) / rescaled_anchors
@@ -200,7 +198,7 @@ class Network(object):
         conf_loss = conf_loss_pos + conf_loss_neg
 
         # shape: [N, 13, 13, 3, 1]
-        class_loss = object_masks * tf.nn.sigmoid_cross_entropy_with_logits(labels=y_true[..., 5:], logits=pred_prob_logits)
+        class_loss = object_masks * tf.nn.sigmoid_cross_entropy_with_logits(labels=object_probs, logits=pred_prob_logits)
 
         xy_loss = tf.reduce_mean(tf.reduce_sum(xy_loss, axis=[1, 2, 3, 4]))
         wh_loss = tf.reduce_mean(tf.reduce_sum(wh_loss, axis=[1, 2, 3, 4]))
@@ -239,6 +237,6 @@ class Network(object):
         # shape: [1, V]
         true_box_area = true_box_wh[..., 0] * true_box_wh[..., 1]  # 真实区域面积
         # [N, 13, 13, 3, V]
-        iou = intersect_area / (pred_box_area + true_box_area - intersect_area)
+        iou = intersect_area / (pred_box_area + true_box_area - intersect_area + tf.keras.backend.epsilon())
 
         return iou

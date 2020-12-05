@@ -20,9 +20,9 @@ def predict_image():
 
     network = Network(False)
     logits = network.build_network(input)
-    output = network.reorg_layer(logits, np.array(model_params['anchors']) / (32, 32))
+    output = network.reorg_layer(logits, model_params['anchors'])
 
-    checkpoints = "./checkpoints/model.ckpt-29000"
+    checkpoints = "./checkpoints/model.ckpt-19000"
     saver = tf.train.Saver()
     with tf.Session() as sess:
         saver.restore(sess, checkpoints)

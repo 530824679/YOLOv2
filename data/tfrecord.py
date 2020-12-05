@@ -94,7 +94,9 @@ class TFRecord(object):
 
         # 图像和标签相对于图像空间归一化
         tf_image = tf.cast(tf_image, tf.float32) / 255.0
-        tf_label = tf_label[..., 0:4] / 416.0
+        norm_label = tf_label[..., 0:4] / 416.0
+        class_label = tf.expand_dims(tf_label[..., 4], axis=-1)
+        tf_label = tf.concat([norm_label, class_label], axis=-1)
 
         y_true = tf.py_func(self.dataset.preprocess_true_boxes, inp=[tf_label], Tout=[tf.float32])
         y_true = tf.reshape(y_true, [self.grid_height, self.grid_width, 5, 6])
@@ -120,24 +122,27 @@ class TFRecord(object):
 
 if __name__ == '__main__':
     tfrecord = TFRecord()
-    tfrecord.create_tfrecord()
+    #tfrecord.create_tfrecord()
 
-    # import matplotlib.pyplot as plt
-    # file = '/home/chenwei/HDD/Project/YOLOv2/tfrecord/train.tfrecord'
-    # tfrecord = TFRecord()
-    # dataset = tfrecord.create_dataset(file, batch_size=2, is_shuffle=False)
-    # iterator = dataset.make_one_shot_iterator()
-    # images, labels = iterator.get_next()
-    #
-    # with tf.Session() as sess:
-    #     for i in range(20):
-    #         images_, labels_ = sess.run([images, labels])
-    #         print(images_.shape, labels.shape)
-    #         for images_i, boxes_ in zip(images_, labels_):
-    #             boxes_ = boxes_[..., 0:4] * 416
-    #             valid = (np.sum(boxes_, axis=-1) > 0).tolist()
-    #             print([int(idx) for idx in boxes_[:, 0][valid].tolist()])
-    #             for box in boxes_[:, 0:4][valid].tolist():
-    #                 cv2.rectangle(images_i, (int(box[0]), int(box[1])), (int(box[2]), int(box[3])), (255, 0, 0), 2)
-    #             cv2.imshow("image", images_i)
-    #             cv2.waitKey(0)
+    import matplotlib.pyplot as plt
+    file = '/home/chenwei/HDD/Project/YOLOv2/tfrecord/train.tfrecord'
+    tfrecord = TFRecord()
+    dataset = tfrecord.create_dataset(file, batch_size=2, is_shuffle=False)
+    iterator = dataset.make_one_shot_iterator()
+    images, labels = iterator.get_next()
+
+    with tf.Session() as sess:
+        for i in range(20):
+            images_, labels_ = sess.run([images, labels])
+            print(images_.shape, labels.shape)
+            for images_i, boxes_ in zip(images_, labels_):
+                data = Dataset()
+                y = data.preprocess_true_boxes(boxes_)
+                image_rgb = cv2.cvtColor(images_i, cv2.COLOR_RGB2BGR)
+                boxes_ = boxes_[..., 0:4] * 416
+                valid = (np.sum(boxes_, axis=-1) > 0).tolist()
+                print([int(idx) for idx in boxes_[:, 0][valid].tolist()])
+                for box in boxes_[:, 0:4][valid].tolist():
+                    cv2.rectangle(image_rgb, (int(box[0]), int(box[1])), (int(box[2]), int(box[3])), (255, 0, 0), 2)
+                cv2.imshow("image", image_rgb)
+                cv2.waitKey(0)

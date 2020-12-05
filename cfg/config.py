@@ -41,7 +41,7 @@ solver_params = {
     'decay_rate': 0.1,              #衰变率
     'staircase': True,
     'batch_size': 8,                # 每批次输入的数据个数
-    'epoches': 50000,               # 训练的最大迭代次数
+    'epoches': 20000,               # 训练的最大迭代次数
     'save_step': 1000,              # 权重保存间隔
     'log_step': 1000,               # 日志保存间隔
     'weight_decay': 0.0001,         # 正则化系数
