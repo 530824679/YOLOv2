@@ -9,7 +9,7 @@ from model.network import Network
 from cfg.config import *
 
 def predict_image():
-    image_path = "/home/chenwei/HDD/Project/datasets/object_detection/FDDB2016/originalPics/2003/07/11/big/img_116.jpg"
+    image_path = "/home/chenwei/HDD/Project/datasets/object_detection/FDDB2016/convert/images/2002_07_19_big_img_90.jpg"
     image = cv2.imread(image_path)
 
     input_shape = (416, 416)

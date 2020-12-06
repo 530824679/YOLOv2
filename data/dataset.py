@@ -114,8 +114,8 @@ class Dataset(object):
         feature_sizes = input_shape // 32
 
         # anchors 归一化到图像空间0~1
-        anchor_array = np.array(model_params['anchors']) / input_shape
         num_anchors = len(self.anchors)
+        anchor_array = np.array(model_params['anchors'])# / input_shape
 
         # labels 去除空标签
         valid = (np.sum(labels, axis=-1) > 0).tolist()
@@ -123,8 +123,8 @@ class Dataset(object):
 
         y_true = np.zeros(shape=[feature_sizes[0], feature_sizes[1], num_anchors, 4 + 1 + len(self.num_classes)], dtype=np.float32)
 
-        boxes_xy = labels[:, 0:2]    # 中心点坐标
-        boxes_wh = labels[:, 2:4]    # 宽，高
+        boxes_xy = (labels[:, 0:2] + labels[:, 2:4]) / 2
+        boxes_wh = labels[:, 2:4] - labels[:, 0:2]
         true_boxes = np.concatenate([boxes_xy, boxes_wh], axis=-1)
 
         anchors_max = anchor_array / 2.
@@ -153,8 +153,8 @@ class Dataset(object):
         best_anchor = np.argmax(iou, axis=-1)
 
         for t, k in enumerate(best_anchor):
-            i = np.floor(true_boxes[t, 0]).astype('int32')
-            j = np.floor(true_boxes[t, 1]).astype('int32')
+            i = int(np.floor(true_boxes[t, 0] / 32.))
+            j = int(np.floor(true_boxes[t, 1] / 32.))
             c = labels[t, 4].astype('int32')
             y_true[j, i, k, 0:4] = true_boxes[t, 0:4]
             y_true[j, i, k, 4] = 1

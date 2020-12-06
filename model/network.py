@@ -101,15 +101,15 @@ class Network(object):
         rescaled_anchors = [(anchor[0] / ratio[1], anchor[1] / ratio[0]) for anchor in anchors]
 
         # 网络输出转化——偏移量、置信度、类别概率
-        predict = tf.reshape(feature_maps, [-1, feature_shape[0], feature_shape[1], self.num_anchors, self.class_num + 5])
+        feature_maps = tf.reshape(feature_maps, [-1, feature_shape[0], feature_shape[1], self.num_anchors, self.class_num + 5])
         # 中心坐标相对于该cell左上角的偏移量，sigmoid函数归一化到0-1
-        xy_offset = tf.nn.sigmoid(predict[..., 0:2])
+        xy_offset = tf.nn.sigmoid(feature_maps[..., 0:2])
         # 相对于anchor的wh比例，通过e指数解码
-        wh_offset = tf.clip_by_value(tf.exp(predict[..., 2:4]), 1e-9, 50)
+        wh_offset = tf.clip_by_value(tf.exp(feature_maps[..., 2:4]), 1e-9, 50)
         # 置信度，sigmoid函数归一化到0-1
-        obj_probs = tf.nn.sigmoid(predict[..., 4:5])
+        obj_probs = tf.nn.sigmoid(feature_maps[..., 4:5])
         # 网络回归的是得分,用softmax转变成类别概率
-        class_probs = tf.nn.softmax(predict[..., 5:])
+        class_probs = tf.nn.softmax(feature_maps[..., 5:])
 
         # 构建特征图每个cell的左上角的xy坐标
         height_index = tf.range(feature_shape[0], dtype=tf.int32)
@@ -122,8 +122,8 @@ class Network(object):
         xy_cell = tf.cast(tf.reshape(xy_cell, [feature_shape[0], feature_shape[1], 1, 2]), tf.float32)
 
         # decode to raw image norm 0-1
-        bboxes_xy = (xy_cell + xy_offset) / tf.cast(feature_shape[::-1], tf.float32)
-        bboxes_wh = (rescaled_anchors * wh_offset) / tf.cast(feature_shape[::-1], tf.float32)
+        bboxes_xy = (xy_cell + xy_offset) * ratio[::-1]# / tf.cast(feature_shape[::-1], tf.float32)
+        bboxes_wh = (rescaled_anchors * wh_offset) * ratio[::-1]# / tf.cast(feature_shape[::-1], tf.float32)
 
         if self.is_train == False:
             # 转变成坐上-右下坐标
@@ -133,13 +133,13 @@ class Network(object):
                                bboxes_xywh[..., 0] + bboxes_xywh[..., 2] / 2,
                                bboxes_xywh[..., 1] + bboxes_xywh[..., 3] / 2], axis=3)
             return bboxes_corners, obj_probs, class_probs
-        return xy_cell, predict, bboxes_xy, bboxes_wh
+        return xy_cell, feature_maps, bboxes_xy, bboxes_wh
 
     def calc_loss(self, logits, y_true):
         feature_size = tf.shape(logits)[1:3]
 
         ratio = tf.cast([self.input_height, self.input_width] / feature_size, tf.float32)
-        rescaled_anchors = [(anchor[0] / ratio[1], anchor[1] / ratio[0]) for anchor in self.anchors]
+        #rescaled_anchors = [(anchor[0] / ratio[1], anchor[1] / ratio[0]) for anchor in self.anchors]
 
         # ground truth
         object_coords = y_true[:, :, :, :, 0:4]
@@ -170,12 +170,12 @@ class Network(object):
 
         # 图像尺寸归一化信息转换为特征图的单元格相对信息
         # shape: [N, 13, 13, 3, 2]  # 坐标反归一化
-        true_xy = y_true[..., 0:2] * tf.cast(feature_size[::-1], tf.float32) - xy_offset
-        pred_xy = pred_box_xy * tf.cast(feature_size[::-1], tf.float32) - xy_offset
+        true_xy = y_true[..., 0:2] / ratio[::-1] - xy_offset#* tf.cast(feature_size[::-1], tf.float32) - xy_offset
+        pred_xy = pred_box_xy / ratio[::-1] - xy_offset#* tf.cast(feature_size[::-1], tf.float32) - xy_offset
 
         # shape: [N, 13, 13, 3, 2],
-        true_tw_th = y_true[..., 2:4] * tf.cast(feature_size, tf.float32) / rescaled_anchors
-        pred_tw_th = pred_box_wh * tf.cast(feature_size, tf.float32) / rescaled_anchors
+        true_tw_th = y_true[..., 2:4] / self.anchors# * tf.cast(feature_size, tf.float32) / rescaled_anchors
+        pred_tw_th = pred_box_wh / self.anchors# * tf.cast(feature_size, tf.float32) / rescaled_anchors
 
         # for numerical stability 稳定训练, 为0时不对anchors进行缩放, 在模型输出值特别小是e^out_put为0
         true_tw_th = tf.where(condition=tf.equal(true_tw_th, 0), x=tf.ones_like(true_tw_th), y=true_tw_th)
@@ -185,9 +185,12 @@ class Network(object):
         pred_tw_th = tf.log(tf.clip_by_value(pred_tw_th, 1e-9, 1e9))
 
         # shape: [N, 13, 13, 3, 1]
-        box_loss_scale = 2. - y_true[..., 2:3] * y_true[..., 3:4]
-        xy_loss = tf.square(true_xy - pred_xy) * object_masks * box_loss_scale
-        wh_loss = tf.square(true_tw_th - pred_tw_th) * object_masks * box_loss_scale
+        box_loss_scale = 2. - (y_true[..., 2:3] / tf.cast(self.input_height, tf.float32)) * (y_true[..., 3:4] / tf.cast(self.input_width, tf.float32))# y_true[..., 2:3] * y_true[..., 3:4]
+        pred_xywh = tf.concat([pred_box_xy, pred_box_wh], axis=-1)
+        diou = tf.expand_dims(self.bbox_diou(pred_xywh, object_coords), axis=-1)
+        diou_loss = object_masks * box_loss_scale * (1 - diou)
+        #xy_loss = tf.square(true_xy - pred_xy) * object_masks * box_loss_scale
+        #wh_loss = tf.square(true_tw_th - pred_tw_th) * object_masks * box_loss_scale
 
         # shape: [N, 13, 13, 3, 1]
         conf_pos_mask = object_masks
@@ -200,13 +203,67 @@ class Network(object):
         # shape: [N, 13, 13, 3, 1]
         class_loss = object_masks * tf.nn.sigmoid_cross_entropy_with_logits(labels=object_probs, logits=pred_prob_logits)
 
-        xy_loss = tf.reduce_mean(tf.reduce_sum(xy_loss, axis=[1, 2, 3, 4]))
-        wh_loss = tf.reduce_mean(tf.reduce_sum(wh_loss, axis=[1, 2, 3, 4]))
+        #xy_loss = tf.reduce_mean(tf.reduce_sum(xy_loss, axis=[1, 2, 3, 4]))
+        #wh_loss = tf.reduce_mean(tf.reduce_sum(wh_loss, axis=[1, 2, 3, 4]))
+        diou_loss = tf.reduce_mean(tf.reduce_sum(diou_loss, axis=[1, 2, 3, 4]))
         conf_loss = tf.reduce_mean(tf.reduce_sum(conf_loss, axis=[1, 2, 3, 4]))
         class_loss = tf.reduce_mean(tf.reduce_sum(class_loss, axis=[1, 2, 3, 4]))
 
-        total_loss = xy_loss + wh_loss + conf_loss + class_loss
-        return total_loss, xy_loss, wh_loss, conf_loss, class_loss
+        total_loss = diou_loss + conf_loss + class_loss
+        return total_loss, diou_loss, conf_loss, class_loss
+
+    def bbox_diou(self, boxes_1, boxes_2):
+        """
+        calculate regression loss using diou
+        :param boxes_1: boxes_1 shape is [x, y, w, h]
+        :param boxes_2: boxes_2 shape is [x, y, w, h]
+        :return:
+        """
+        # calculate center distance
+        center_distance = tf.reduce_sum(tf.square(boxes_1[..., :2] - boxes_2[..., :2]), axis=-1)
+
+        # transform [x, y, w, h] to [x_min, y_min, x_max, y_max]
+        boxes_1 = tf.concat([boxes_1[..., :2] - boxes_1[..., 2:] * 0.5,
+                             boxes_1[..., :2] + boxes_1[..., 2:] * 0.5], axis=-1)
+        boxes_2 = tf.concat([boxes_2[..., :2] - boxes_2[..., 2:] * 0.5,
+                             boxes_2[..., :2] + boxes_2[..., 2:] * 0.5], axis=-1)
+        boxes_1 = tf.concat([tf.minimum(boxes_1[..., :2], boxes_1[..., 2:]),
+                             tf.maximum(boxes_1[..., :2], boxes_1[..., 2:])], axis=-1)
+        boxes_2 = tf.concat([tf.minimum(boxes_2[..., :2], boxes_2[..., 2:]),
+                             tf.maximum(boxes_2[..., :2], boxes_2[..., 2:])], axis=-1)
+
+        # calculate area of boxes_1 boxes_2
+        boxes_1_area = (boxes_1[..., 2] - boxes_1[..., 0]) * (boxes_1[..., 3] - boxes_1[..., 1])
+        boxes_2_area = (boxes_2[..., 2] - boxes_2[..., 0]) * (boxes_2[..., 3] - boxes_2[..., 1])
+
+        # calculate the two corners of the intersection
+        left_up = tf.maximum(boxes_1[..., :2], boxes_2[..., :2])
+        right_down = tf.minimum(boxes_1[..., 2:], boxes_2[..., 2:])
+
+        # calculate area of intersection
+        inter_section = tf.maximum(right_down - left_up, 0.0)
+        inter_area = inter_section[..., 0] * inter_section[..., 1]
+
+        # calculate union area
+        union_area = boxes_1_area + boxes_2_area - inter_area
+
+        # calculate IoU, add epsilon in denominator to avoid dividing by 0
+        iou = inter_area / (union_area + tf.keras.backend.epsilon())
+
+        # calculate the upper left and lower right corners of the minimum closed convex surface
+        enclose_left_up = tf.minimum(boxes_1[..., :2], boxes_2[..., :2])
+        enclose_right_down = tf.maximum(boxes_1[..., 2:], boxes_2[..., 2:])
+
+        # calculate width and height of the minimun closed convex surface
+        enclose_wh = tf.maximum(enclose_right_down - enclose_left_up, 0.0)
+
+        # calculate enclosed diagonal distance
+        enclose_diagonal = tf.reduce_sum(tf.square(enclose_wh), axis=-1)
+
+        # calculate diou add epsilon in denominator to avoid dividing by 0
+        diou = iou - 1.0 * center_distance / (enclose_diagonal + tf.keras.backend.epsilon())
+
+        return diou
 
     def broadcast_iou(self, true_box_xy, true_box_wh, pred_box_xy, pred_box_wh):
         # shape:

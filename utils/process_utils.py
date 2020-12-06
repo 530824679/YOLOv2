@@ -81,7 +81,7 @@ def bboxes_sort(classes, scores, bboxes, top_k=400):
     return classes, scores, bboxes
 
 # 计算nms
-def bboxes_nms(classes, scores, bboxes, nms_threshold=0.5):
+def bboxes_nms(classes, scores, bboxes, nms_threshold=0.02):
     keep_bboxes = np.ones(scores.shape, dtype=np.bool)
     for i in range(scores.size-1):
         if keep_bboxes[i]:
@@ -119,15 +119,15 @@ def preprocess(image, image_size=(416, 416)):
     return image_expanded
 
 # 筛选解码后的回归边界框
-def postprocess(bboxes, obj_probs, class_probs, image_shape=(416,416), threshold=0.02):
+def postprocess(bboxes, obj_probs, class_probs, image_shape=(416,416), threshold=0.01):
     # boxes shape——> [num, 4]
     bboxes = np.reshape(bboxes, [-1, 4])
 
     # 将box还原成图片中真实的位置
-    bboxes[:, 0:1] *= float(image_shape[1])  # xmin*width
-    bboxes[:, 1:2] *= float(image_shape[0])  # ymin*height
-    bboxes[:, 2:3] *= float(image_shape[1])  # xmax*width
-    bboxes[:, 3:4] *= float(image_shape[0])  # ymax*height
+    bboxes[:, 0:1] = bboxes[:, 0:1] / 416.0 * float(image_shape[1])  # xmin*width
+    bboxes[:, 1:2] = bboxes[:, 1:2] / 416.0 * float(image_shape[0])  # ymin*height
+    bboxes[:, 2:3] = bboxes[:, 2:3] / 416.0 * float(image_shape[1])  # xmax*width
+    bboxes[:, 3:4] = bboxes[:, 3:4] / 416.0 * float(image_shape[0])  # ymax*height
     bboxes = bboxes.astype(np.int32)
 
     # 将边界框超出整张图片(0,0)—(415,415)的部分cut掉
@@ -169,7 +169,7 @@ def boxes_to_corners(boxes):
         box_maxes[..., 0:1]  # x_max
     ])
 
-def visualization(im, bboxes, scores, cls_inds, labels, thr=0.02):
+def visualization(image, bboxes, scores, cls_inds, labels, thr=0.02):
     # Generate colors for drawing bounding boxes.
     hsv_tuples = [(x / float(len(labels)), 1., 1.) for x in range(len(labels))]
     colors = list(map(lambda x: colorsys.hsv_to_rgb(*x), hsv_tuples))
@@ -180,7 +180,7 @@ def visualization(im, bboxes, scores, cls_inds, labels, thr=0.02):
     random.seed(None)  # Reset seed to default.
 
     # draw image
-    imgcv = np.copy(im)
+    imgcv = np.copy(image)
     h, w, _ = imgcv.shape
     for i, box in enumerate(bboxes):
         if scores[i] < thr:

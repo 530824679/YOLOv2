@@ -40,11 +40,10 @@ def train():
     logits = network.build_network(images)
 
     # 计算损失函数
-    total_loss, xy_loss, wh_loss, confs_loss, class_loss = network.calc_loss(logits, y_true)
+    total_loss, diou_loss, confs_loss, class_loss = network.calc_loss(logits, y_true)
 
     tf.summary.scalar('total_loss', total_loss)
-    tf.summary.scalar("xy_loss", xy_loss)
-    tf.summary.scalar("wh_loss", wh_loss)
+    tf.summary.scalar("diou_loss", diou_loss)
     tf.summary.scalar("confs_loss", confs_loss)
     tf.summary.scalar("class_loss", class_loss)
 
@@ -82,10 +81,10 @@ def train():
 
         print('\n----------- start to train -----------\n')
         for epoch in range(start_step + 1, solver_params['epoches']):
-            _, summary_, loss_, xy_loss_, wh_loss_, confs_loss_, class_loss_, global_step_, lr = sess.run([train_op, summary_op, total_loss, xy_loss, wh_loss, confs_loss, class_loss, global_step, learn_rate])
+            _, summary_, loss_, diou_loss_, confs_loss_, class_loss_, global_step_, lr = sess.run([train_op, summary_op, total_loss, diou_loss, confs_loss, class_loss, global_step, learn_rate])
 
-            print("Epoch: {}, global_step: {}, lr: {:.8f}, total_loss: {:.3f}, xy_loss: {:.3f}, wh_loss: {:.3f},confs_loss: {:.3f}, class_loss: {:.3f}".format(
-                    epoch, global_step_, lr, loss_, xy_loss_, wh_loss_, confs_loss_, class_loss_))
+            print("Epoch: {}, global_step: {}, lr: {:.8f}, total_loss: {:.3f}, diou_loss: {:.3f},confs_loss: {:.3f}, class_loss: {:.3f}".format(
+                    epoch, global_step_, lr, loss_, diou_loss_, confs_loss_, class_loss_))
 
             if epoch % solver_params['save_step'] == 0 and epoch > 0:
                 save_path = saver.save(sess, os.path.join(checkpoint_dir, checkpoints_name), global_step=epoch)
