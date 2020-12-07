@@ -119,15 +119,15 @@ def preprocess(image, image_size=(416, 416)):
     return image_expanded
 
 # 筛选解码后的回归边界框
-def postprocess(bboxes, obj_probs, class_probs, image_shape=(416,416), threshold=0.01):
-    # boxes shape——> [num, 4]
+def postprocess(bboxes, obj_probs, class_probs, image_shape=(416,416), threshold=0.5):
+    # boxes shape——> [num, 4] (xmin, ymin, xmax, ymax)
     bboxes = np.reshape(bboxes, [-1, 4])
 
     # 将box还原成图片中真实的位置
-    bboxes[:, 0:1] = bboxes[:, 0:1] / 416.0 * float(image_shape[1])  # xmin*width
-    bboxes[:, 1:2] = bboxes[:, 1:2] / 416.0 * float(image_shape[0])  # ymin*height
-    bboxes[:, 2:3] = bboxes[:, 2:3] / 416.0 * float(image_shape[1])  # xmax*width
-    bboxes[:, 3:4] = bboxes[:, 3:4] / 416.0 * float(image_shape[0])  # ymax*height
+    bboxes[:, 0:1] = bboxes[:, 0:1] * float(image_shape[1])  # xmin*width
+    bboxes[:, 1:2] = bboxes[:, 1:2] * float(image_shape[0])  # ymin*height
+    bboxes[:, 2:3] = bboxes[:, 2:3] * float(image_shape[1])  # xmax*width
+    bboxes[:, 3:4] = bboxes[:, 3:4] * float(image_shape[0])  # ymax*height
     bboxes = bboxes.astype(np.int32)
 
     # 将边界框超出整张图片(0,0)—(415,415)的部分cut掉
@@ -151,7 +151,7 @@ def postprocess(bboxes, obj_probs, class_probs, image_shape=(416,416), threshold
     class_max_index, scores, bboxes = bboxes_sort(class_max_index, scores, bboxes)
 
     # 计算nms
-    class_max_index, scores, bboxes = bboxes_nms(class_max_index, scores, bboxes)
+    #class_max_index, scores, bboxes = bboxes_nms(class_max_index, scores, bboxes)
 
     return bboxes, scores, class_max_index
 
