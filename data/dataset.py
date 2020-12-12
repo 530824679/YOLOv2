@@ -85,7 +85,7 @@ class Dataset(object):
             box = self.convert(data)
             bboxes.append(box)
 
-        while bboxes.shape[0] < 150:
+        while len(bboxes) < 150:
             bboxes = np.append(bboxes, [[0.0, 0.0, 0.0, 0.0, 0.0]], axis=0)
 
         bboxes = np.array(bboxes, dtype=np.float32)

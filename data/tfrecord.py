@@ -34,7 +34,7 @@ class TFRecord(object):
 
     # 数值形式的数据,首先转换为string,再转换为int形式进行保存
     def _int64_feature(self, value):
-        return tf.train.Feature(int64_list=tf.train.Int64List(value=[value]))
+        return tf.train.Feature(int64_list=tf.train.Int64List(value=value))
 
     def _float_feature(self, value):
         return tf.train.Feature(float_list=tf.train.FloatList(value=[value]))
@@ -62,8 +62,8 @@ class TFRecord(object):
                     feature={
                         'image': tf.train.Feature(bytes_list=tf.train.BytesList(value=[image_raw])),
                         'bbox': tf.train.Feature(bytes_list=tf.train.BytesList(value=[bbox_raw])),
-                        'height': tf.train.Feature(bytes_list=tf.train.Int64List(value=image_shape[0])),
-                        'width': tf.train.Feature(bytes_list=tf.train.Int64List(value=image_shape[1])),
+                        'height': tf.train.Feature(int64_list=tf.train.Int64List(value=[image_shape[0]])),
+                        'width': tf.train.Feature(int64_list=tf.train.Int64List(value=[image_shape[1]])),
                     }))
                 writer.write(example.SerializeToString())
         writer.close()
@@ -80,21 +80,21 @@ class TFRecord(object):
             features={
                 'image': tf.FixedLenFeature([], tf.string),
                 'bbox': tf.FixedLenFeature([], tf.string),
-                'height': tf.FixedLenFeature([], tf.string),
-                'width': tf.FixedLenFeature([], tf.string),
+                'height': tf.FixedLenFeature([], tf.int64),
+                'width': tf.FixedLenFeature([], tf.int64)
             })
 
         # 进行解码
         tf_image = tf.decode_raw(features['image'], tf.uint8)
         tf_bbox = tf.decode_raw(features['bbox'], tf.float32)
-        tf_height = tf.decode_raw(features['height'], tf.int64)
-        tf_width = tf.decode_raw(features['width'], tf.int64)
+        tf_height = features['height']
+        tf_width = features['width']
 
         # 转换为网络输入所要求的形状
         tf_image = tf.reshape(tf_image, [tf_height, tf_width, 3])
         tf_label = tf.reshape(tf_bbox, [150, 5])
 
-        y_true = tf.py_func(self.dataset.preprocess_true_data, inp=[tf_image, tf_label], Tout=[tf.float32, tf.float32])
+        tf_image, y_true = tf.py_func(self.dataset.preprocess_true_data, inp=[tf_image, tf_label], Tout=[tf.float32, tf.float32])
         y_true = tf.reshape(y_true, [self.grid_height, self.grid_width, 5, 6])
         return tf_image, y_true
 
@@ -107,10 +107,11 @@ class TFRecord(object):
         :return:
         """
         dataset = tf.data.TFRecordDataset(filenames)
+
+        dataset = dataset.map(self.parse_single_example, num_parallel_calls=4)
         if is_shuffle:
             dataset = dataset.shuffle(batch_num)
         dataset = dataset.batch(batch_size)
-        dataset = dataset.map(self.parse_single_example, num_parallel_calls=4)
         dataset = dataset.repeat()
         dataset = dataset.prefetch(batch_size)
 
