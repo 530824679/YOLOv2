@@ -85,6 +85,14 @@ def train():
             else:
                 print("Failed to find a checkpoint")
 
+        if solver_params['pre_train']:
+            pretrained = np.load(path_params['pretrain_weights'], allow_pickle=True).item()
+            for variable in tf.trainable_variables():
+                for key in pretrained.keys():
+                    key2 = variable.name.rstrip(':0')
+                    if (key == key2):
+                        sess.run(tf.assign(variable, pretrained[key]))
+
         summary_writer.add_graph(sess.graph)
 
         print('\n----------- start to train -----------\n')

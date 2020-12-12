@@ -10,6 +10,7 @@ import os
 
 path_params = {
     'data_path': '/home/chenwei/HDD/Project/datasets/object_detection/FDDB2016/convert',
+    'pretrain_weights': '/home/chenwei/HDD/Project/CenterNet/weights/resnet34.npy',
     'checkpoints_dir': './checkpoints',
     'logs_dir': './logs',
     'tfrecord_dir': '/home/chenwei/HDD/Project/YOLOv2/tfrecord',
@@ -45,7 +46,8 @@ solver_params = {
     'save_step': 10,                # 权重保存间隔
     'log_step': 10,                 # 日志保存间隔
     'weight_decay': 0.0001,         # 正则化系数
-    'restore': False                # 支持restore
+    'restore': False,                # 支持restore
+    'pre_train': True
 }
 
 test_params = {
