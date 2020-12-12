@@ -121,12 +121,10 @@ class Network(object):
         xy_cell = tf.concat([x_cell, y_cell], axis=-1)
         xy_cell = tf.cast(tf.reshape(xy_cell, [feature_shape[0], feature_shape[1], 1, 2]), tf.float32)
 
-        # decode to raw image norm 0-1
         bboxes_xy = (xy_cell + xy_offset) * ratio[::-1]# / tf.cast(feature_shape[::-1], tf.float32)
         bboxes_wh = (rescaled_anchors * wh_offset) * ratio[::-1]# / tf.cast(feature_shape[::-1], tf.float32)
 
         if self.is_train == False:
-            # 转变成坐上-右下坐标
             bboxes_xywh = tf.concat([bboxes_xy, bboxes_wh], axis=-1)
             bboxes_corners = tf.stack([bboxes_xywh[..., 0] - bboxes_xywh[..., 2] / 2,
                                bboxes_xywh[..., 1] - bboxes_xywh[..., 3] / 2,

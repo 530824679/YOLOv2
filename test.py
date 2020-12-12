@@ -11,14 +11,14 @@ from cfg.config import *
 def predict_image():
     image_path = "/home/chenwei/HDD/Project/datasets/object_detection/FDDB2016/convert/images/2002_07_19_big_img_90.jpg"
     image = cv2.imread(image_path)
+    image_size = image.shape[:2]
+    input_shape = [model_params['input_height'], model_params['input_width']]
+    image_data = pre_process(image, input_shape)
+    image_data = image_data[np.newaxis, ...]
 
-    input_shape = (416, 416)
-    image_shape = image.shape[:2]
-    image_normal = preprocess(image, input_shape)
+    input = tf.placeholder(shape=[1, None, None, 3], dtype=tf.float32)
 
-    input = tf.placeholder(tf.float32,[1, input_shape[0], input_shape[1], 3])
-
-    network = Network(False)
+    network = Network(is_train=False)
     logits = network.build_network(input)
     output = network.reorg_layer(logits, model_params['anchors'])
 
@@ -26,7 +26,7 @@ def predict_image():
     saver = tf.train.Saver()
     with tf.Session() as sess:
         saver.restore(sess, checkpoints)
-        bboxes, obj_probs, class_probs = sess.run(output, feed_dict={input: image_normal})
+        bboxes, obj_probs, class_probs = sess.run(output, feed_dict={input: image_data})
 
     bboxes, scores, class_max_index = postprocess(bboxes, obj_probs, class_probs, image_shape=image_shape)
 

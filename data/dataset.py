@@ -19,6 +19,7 @@ import numpy as np
 import tensorflow as tf
 from cfg.config import path_params, model_params, classes_map
 from utils.process_utils import *
+from data.augmentation import *
 
 class Dataset(object):
     def __init__(self):
@@ -72,8 +73,7 @@ class Dataset(object):
     def load_data(self, filename):
         image_path = os.path.join(self.data_path, "images", filename+'.jpg')
         image = cv2.imread(image_path)
-        image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-
+        image_shape = image.shape
         label_path = os.path.join(self.data_path, "labels", filename+'.txt')
         lines = [line.rstrip() for line in open(label_path)]
 
@@ -85,18 +85,16 @@ class Dataset(object):
             box = self.convert(data)
             bboxes.append(box)
 
-        image_rgb, bboxes = self.letterbox_resize(image_rgb, np.array(bboxes, dtype=np.float32), self.input_height, self. input_width)
-
         while bboxes.shape[0] < 150:
             bboxes = np.append(bboxes, [[0.0, 0.0, 0.0, 0.0, 0.0]], axis=0)
 
         bboxes = np.array(bboxes, dtype=np.float32)
-        image_raw = image_rgb.tobytes()
+        image_raw = image.tobytes()
         bbox_raw = bboxes.tobytes()
 
-        return image_raw, bbox_raw
+        return image_raw, bbox_raw, image_shape
 
-    def preprocess_true_boxes(self, labels):
+    def preprocess_true_data(self, image, labels):
         """
         preprocess true boxes to train input format
         :param labels: numpy.ndarray of shape [20, 5]
@@ -104,10 +102,16 @@ class Dataset(object):
                        shape[1]: x_min, y_min, x_max, y_max, class_index, yaw
         :return: y_true shape is [feature_height, feature_width, per_anchor_num, 5 + num_classes]
         """
-        # class id must be less than num_classes
-        #assert (labels[..., 4] < len(self.num_classes)).all()
-        input_shape = np.array([self.input_height, self.input_width], dtype=np.int32)
+        image = np.array(image)
+        image, labels = random_horizontal_flip(image, labels)
+        image, labels = random_crop(image, labels)
+        image, labels = random_translate(image, labels)
 
+        image_rgb = cv2.cvtColor(np.copy(image), cv2.COLOR_BGR2RGB).astype(np.float32)
+        image_rgb, labels = letterbox_resize(image_rgb, (self.input_height, self.input_width), np.copy(labels), interp=0)
+        image_norm = image_rgb / 255.
+
+        input_shape = np.array([self.input_height, self.input_width], dtype=np.int32)
         assert input_shape[0] % 32 == 0
         assert input_shape[1] % 32 == 0
 
@@ -115,7 +119,7 @@ class Dataset(object):
 
         # anchors 归一化到图像空间0~1
         num_anchors = len(self.anchors)
-        anchor_array = np.array(model_params['anchors'])# / input_shape
+        anchor_array = np.array(model_params['anchors'])
 
         # labels 去除空标签
         valid = (np.sum(labels, axis=-1) > 0).tolist()
@@ -160,5 +164,5 @@ class Dataset(object):
             y_true[j, i, k, 4] = 1
             y_true[j, i, k, 5 + c] = 1
 
-        return y_true
+        return image_norm, y_true
 
