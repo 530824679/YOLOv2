@@ -28,9 +28,9 @@ def predict_image():
         saver.restore(sess, checkpoints)
         bboxes, obj_probs, class_probs = sess.run(output, feed_dict={input: image_data})
 
-    bboxes, scores, class_max_index = postprocess(bboxes, obj_probs, class_probs, image_shape=image_shape)
+    bboxes, scores, class_id = postprocess(bboxes, obj_probs, class_probs, image_shape=image_size, input_shape=input_shape)
 
-    img_detection = visualization(image, bboxes, scores, class_max_index, model_params["classes"])
+    img_detection = visualization(image, bboxes, scores, class_id, model_params["classes"])
     cv2.imshow("result", img_detection)
     cv2.waitKey(0)
 
