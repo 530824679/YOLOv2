@@ -33,35 +33,6 @@ class Network(object):
         self.noobject_scale = model_params['noobject_scale']
         self.coord_scale = model_params['coord_scale']
 
-    def _block(self, inputs, filters, strides=1):
-        expansion = 1
-        conv1_bn_relu = conv(inputs, filters, [3, 3], strides, 'same', activation=tf.nn.relu, is_training=self.is_train, use_bn=True)
-        conv2_bn = conv(conv1_bn_relu, filters, [3, 3], 1, 'same', activation=None, is_training=self.is_train, use_bn=True)
-        if strides != 1 or self.inplanes != filters * expansion:
-            inputs = conv(inputs, filters, [1, 1], strides, 'valid', activation=None, is_training=self.is_train, use_bn=True)
-            self.inplanes = filters * expansion
-        out = tf.nn.relu(conv2_bn + inputs)
-        return out
-
-    def _module(self, x, num_channels, layers, strides=1):
-        for i in range(layers):
-            if i == 0:
-                x = self._block(x, num_channels, strides=strides)
-            else:
-                x = self._block(x, num_channels)
-        return x
-
-    def _resnet34(self, inputs):
-        net = conv(inputs, 64, [7, 7], 2, 'same', activation=tf.nn.relu, is_training=self.is_train, use_bn=True)
-        net = tf.layers.max_pooling2d(net, pool_size=3, strides=2, padding='same')
-
-        layer1 = self._module(net, 64, 3, 1)
-        layer2 = self._module(layer1, 128, 4, 2)
-        layer3 = self._module(layer2, 256, 6, 2)
-        layer4 = self._module(layer3, 512, 3, 2)
-
-        return layer3, layer4
-
     def build_network(self, inputs, scope='yolo_v2'):
         """
         定义前向传播过程
@@ -69,34 +40,31 @@ class Network(object):
         :param scope: 命名空间
         :return: 网络最终的输出
         """
-        # with tf.name_scope(scope):
-        #     net = conv2d(inputs, filters_num=32, filters_size=3, pad_size=1, is_train=self.is_train, name='conv1')
-        #     net = maxpool(net, size=2, stride=2, name='pool1')
-        #
-        #     net = conv2d(net, 64, 3, 1, is_train=self.is_train, name='conv2')
-        #     net = maxpool(net, 2, 2, name='pool2')
-        #
-        #     net = conv2d(net, 128, 3, 1, is_train=self.is_train, name='conv3_1')
-        #     net = conv2d(net, 64, 1, 0, is_train=self.is_train, name='conv3_2')
-        #     net = conv2d(net, 128, 3, 1, is_train=self.is_train, name='conv3_3')
-        #     net = maxpool(net, 2, 2, name='pool3')
-        #
-        #     net = conv2d(net, 256, 3, 1, is_train=self.is_train, name='conv4_1')
-        #     net = conv2d(net, 128, 1, 0, is_train=self.is_train, name='conv4_2')
-        #     net = conv2d(net, 256, 3, 1, is_train=self.is_train, name='conv4_3')
-        #     net = maxpool(net, 2, 2, name='pool4')
+        net = conv2d(inputs, filters_num=32, filters_size=3, pad_size=1, is_train=self.is_train, name='conv1')
+        net = maxpool(net, size=2, stride=2, name='pool1')
 
-            # net = conv2d(net, 512, 3, 1, is_train=self.is_train, name='conv5_1')
-            # net = conv2d(net, 256, 1, 0, is_train=self.is_train, name='conv5_2')
-            # net = conv2d(net, 512, 3, 1, is_train=self.is_train, name='conv5_3')
-            # net = conv2d(net, 256, 1, 0, is_train=self.is_train, name='conv5_4')
-            # net = conv2d(net, 512, 3, 1, is_train=self.is_train, name='conv5_5')
-            #
-            # # 存储这一层特征图，以便后面passthrough层
-            # shortcut = net
-            # net = maxpool(net, 2, 2, name='pool5')
+        net = conv2d(net, 64, 3, 1, is_train=self.is_train, name='conv2')
+        net = maxpool(net, 2, 2, name='pool2')
 
-        shortcut, net = self._resnet34(inputs)
+        net = conv2d(net, 128, 3, 1, is_train=self.is_train, name='conv3_1')
+        net = conv2d(net, 64, 1, 0, is_train=self.is_train, name='conv3_2')
+        net = conv2d(net, 128, 3, 1, is_train=self.is_train, name='conv3_3')
+        net = maxpool(net, 2, 2, name='pool3')
+
+        net = conv2d(net, 256, 3, 1, is_train=self.is_train, name='conv4_1')
+        net = conv2d(net, 128, 1, 0, is_train=self.is_train, name='conv4_2')
+        net = conv2d(net, 256, 3, 1, is_train=self.is_train, name='conv4_3')
+        net = maxpool(net, 2, 2, name='pool4')
+
+        net = conv2d(net, 512, 3, 1, is_train=self.is_train, name='conv5_1')
+        net = conv2d(net, 256, 1, 0, is_train=self.is_train, name='conv5_2')
+        net = conv2d(net, 512, 3, 1, is_train=self.is_train, name='conv5_3')
+        net = conv2d(net, 256, 1, 0, is_train=self.is_train, name='conv5_4')
+        net = conv2d(net, 512, 3, 1, is_train=self.is_train, name='conv5_5')
+
+        # 存储这一层特征图，以便后面passthrough层
+        shortcut = net
+        net = maxpool(net, 2, 2, name='pool5')
 
         net = conv2d(net, 1024, 3, 1, is_train=self.is_train, name='conv6_1')
         net = conv2d(net, 512, 1, 0, is_train=self.is_train, name='conv6_2')
