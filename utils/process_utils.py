@@ -157,7 +157,7 @@ def boxes_to_corners(boxes):
         box_maxes[..., 0:1]  # x_max
     ])
 
-def visualization(image, bboxes, scores, cls_inds, labels, thr=0.02):
+def visualization(image, bboxes, scores, cls_inds, labels, thr=0.3):
     # Generate colors for drawing bounding boxes.
     hsv_tuples = [(x / float(len(labels)), 1., 1.) for x in range(len(labels))]
     colors = list(map(lambda x: colorsys.hsv_to_rgb(*x), hsv_tuples))
@@ -176,8 +176,8 @@ def visualization(image, bboxes, scores, cls_inds, labels, thr=0.02):
         cls_indx = cls_inds[i]
 
         thick = int((h + w) / 300)
-        cv2.rectangle(imgcv, (int(box[0]), int(box[1])), (int(box[2]), int(box[3])), colors[cls_indx], thick)
-        mess = '%s: %.3f' % (labels[cls_indx], scores[i])
+        cv2.rectangle(imgcv, (int(box[0]), int(box[1])), (int(box[2]), int(box[3])), colors[0], thick)
+        mess = '%s: %.3f' % (labels[0], scores[i])
         if box[1] < 20:
             text_loc = (int(box[0] + 2), int(box[1] + 15))
         else:

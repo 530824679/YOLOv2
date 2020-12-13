@@ -133,3 +133,4 @@ dmypy.json
 tfrecord/
 logs/
 checkpoints/
+weights/

@@ -38,8 +38,8 @@ model_params = {
 solver_params = {
     'gpu': '0',                     # 使用的gpu索引
     'lr': 1e-3,                     # 初始学习率
-    'decay_steps': 30000,           # 衰变步数
-    'decay_rate': 0.1,              # 衰变率
+    'decay_steps': 5000,           # 衰变步数
+    'decay_rate': 0.95,              # 衰变率
     'staircase': True,
     'batch_size': 16,                # 每批次输入的数据个数
     'epoches': 2000,                # 训练的最大迭代次数
