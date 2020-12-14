@@ -183,5 +183,5 @@ def visualization(image, bboxes, scores, cls_inds, labels, thr=0.3):
         else:
             text_loc = (int(box[0]), int(box[1] - 10))
         cv2.putText(imgcv, mess, text_loc, cv2.FONT_HERSHEY_SIMPLEX, 1e-3 * h, (255, 255, 255), thick // 3)
-    cv2.imshow("test", imgcv)
-    cv2.waitKey(0)
+
+    return imgcv
