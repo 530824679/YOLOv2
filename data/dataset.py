@@ -33,6 +33,11 @@ class Dataset(object):
         self.iou_threshold = model_params['iou_threshold']
 
     def convert(self, data):
+        """
+        transform [x,y,w,h,class_id to [x1,y1,x2,y2, class_id]
+        :param data: label data shape is [5,]
+        :return: [x1, y1, x2, y2, class_id]
+        """
         x1 = data[1] - data[3] / 2.0
         y1 = data[2] - data[4] / 2.0
         x2 = data[1] + data[3] / 2.0
@@ -49,7 +54,7 @@ class Dataset(object):
         :param new_height: new image height
         :param new_width: new image width
         :param interp:
-        :return: result
+        :return: image_padded, bboxes
         """
         origin_height, origin_width = image.shape[:2]
         resize_ratio = min(new_width / origin_width, new_height / origin_height)
@@ -71,6 +76,11 @@ class Dataset(object):
         return image_padded, bboxes
 
     def load_data(self, filename):
+        """
+        load image and label
+        :param filename: file name
+        :return: image_raw, bbox_raw, image_shape
+        """
         image_path = os.path.join(self.data_path, "images", filename+'.jpg')
         image = cv2.imread(image_path)
         image_shape = image.shape
@@ -97,16 +107,21 @@ class Dataset(object):
     def preprocess_true_data(self, image, labels):
         """
         preprocess true boxes to train input format
+        :param image: numpy.ndarray of shape [416, 416, 3]
         :param labels: numpy.ndarray of shape [20, 5]
                        shape[0]: the number of labels in each image.
                        shape[1]: x_min, y_min, x_max, y_max, class_index, yaw
-        :return: y_true shape is [feature_height, feature_width, per_anchor_num, 5 + num_classes]
+        :return:
+        image_norm is normalized image[0~1]
+        y_true shape is [feature_height, feature_width, per_anchor_num, 5 + num_classes]
         """
+        # 数据增广，包括水平翻转，裁剪，平移
         image = np.array(image)
         image, labels = random_horizontal_flip(image, labels)
         image, labels = random_crop(image, labels)
         image, labels = random_translate(image, labels)
 
+        # 图像尺寸缩放到416*416，并进行归一化
         image_rgb = cv2.cvtColor(np.copy(image), cv2.COLOR_BGR2RGB).astype(np.float32)
         image_rgb, labels = letterbox_resize(image_rgb, (self.input_height, self.input_width), np.copy(labels), interp=0)
         image_norm = image_rgb / 255.

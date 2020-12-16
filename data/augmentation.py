@@ -190,6 +190,12 @@ def mix_up(image_1, image_2, bbox_1, bbox_2):
     return mix_image, mix_bbox
 
 def random_crop(image, bboxes):
+    """
+    Randomly crop the image and correct the box
+    :param image: BGR image data shape is [height, width, channel]
+    :param bboxes: bounding box shape is [num, 4]
+    :return: result
+    """
     if random.random() < 0.5:
         h, w, _ = image.shape
         max_bbox = np.concatenate([np.min(bboxes[:, 0:2], axis=0), np.max(bboxes[:, 2:4], axis=0)], axis=-1)

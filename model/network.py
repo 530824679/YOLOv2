@@ -137,6 +137,12 @@ class Network(object):
         return bboxes_xy, bboxes_wh
 
     def calc_loss(self, logits, y_true):
+        """
+        计算预测值和标签直接的损失
+        :param logits: shape is [batch_size, grid_size, grid_size, anchor_num, 5 + num_class]
+        :param y_true: shape is [batch_size, grid_size, grid_size, anchor_num, 5 + num_class]
+        :return: 网络最终的输出
+        """
         feature_size = tf.shape(logits)[1:3]
 
         ratio = tf.cast([self.input_height, self.input_width] / feature_size, tf.float32)
@@ -154,7 +160,6 @@ class Network(object):
 
         # predicts
         pred_box_xy, pred_box_wh = self.reorg_layer(logits, self.anchors)
-
         predictions = tf.reshape(logits, [-1, feature_size[0], feature_size[1], self.num_anchors, self.class_num + 5])
         pred_conf_logits = predictions[:, :, :, :, 4:5]
         pred_prob_logits = predictions[:, :, :, :, 5:]
