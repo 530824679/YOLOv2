@@ -8,7 +8,12 @@ from utils.process_utils import *
 from model.network import Network
 from cfg.config import *
 
+os.environ["CUDA_VISIBLE_DEVICES"]="0"
+
 def predict_video():
+    config = tf.ConfigProto()
+    config.gpu_options.allow_growth = True
+
     capture = cv2.VideoCapture(0)
 
     input = tf.placeholder(shape=[1, None, None, 3], dtype=tf.float32)
@@ -17,10 +22,10 @@ def predict_video():
     logits = network.build_network(input)
     output = network.reorg_layer(logits, model_params['anchors'])
 
-    checkpoints = "/home/chenwei/HDD/Project/YOLOv2/checkpoints/model.ckpt-128"
+    checkpoints = "./checkpoints/model.ckpt-128"
     saver = tf.train.Saver()
 
-    with tf.Session() as sess:
+    with tf.Session(config=config) as sess:
         saver.restore(sess, checkpoints)
 
         while (True):
@@ -56,7 +61,7 @@ def predict_image():
     logits = network.build_network(input)
     output = network.reorg_layer(logits, model_params['anchors'])
 
-    checkpoints = "/home/chenwei/HDD/Project/YOLOv2/checkpoints/model.ckpt-128"
+    checkpoints = "./checkpoints/model.ckpt-128"
     saver = tf.train.Saver()
     with tf.Session() as sess:
         saver.restore(sess, checkpoints)
